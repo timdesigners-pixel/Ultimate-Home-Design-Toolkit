@@ -484,12 +484,29 @@ pub fn build(scene: &Scene, opt: &MeshOptions) -> SceneMesh {
                 push_box(m.batch(frame_mat), o0, mul(ud, fr), [0.0, hs, 0.0], across);
                 push_box(m.batch(frame_mat), add(o0, mul(ud, ws - fr)), mul(ud, fr), [0.0, hs, 0.0], across);
                 push_box(m.batch(frame_mat), add(o0, [0.0, hs - fr, 0.0]), mul(ud, ws), [0.0, fr, 0.0], across);
+                let glazed = o.kind == OpeningKind::Window || o.style == "surgu" || o.style == "cam";
                 match o.kind {
+                    _ if glazed && o.kind == OpeningKind::Door => {
+                        // sürgülü ya da camlı kapı: alt kasa + iki cam panel
+                        push_box(m.batch(frame_mat), o0, mul(ud, ws), [0.0, fr, 0.0], across);
+                        let panels = if o.style == "surgu" { 2 } else { 1 };
+                        let pw = (ws - 2.0 * fr) / panels as f64;
+                        for k in 0..panels {
+                            let shift = if k % 2 == 0 { 0.25 } else { 0.6 };
+                            let p0 = add(add(o0, mul(ud, fr + pw * k as f64)), add([0.0, fr, 0.0], mul(across, shift)));
+                            push_box(m.batch(frame_mat), p0, mul(ud, pw), [0.0, hs - 2.0 * fr, 0.0], mul(across, 0.15));
+                            push_box(m.batch("cam"), add(p0, add(mul(ud, fr * 0.6), [0.0, fr * 0.6, -0.0])), mul(ud, pw - fr * 1.2), [0.0, hs - 2.0 * fr - fr * 1.2, 0.0], mul(across, 0.16));
+                        }
+                    }
                     OpeningKind::Window => {
                         push_box(m.batch(frame_mat), o0, mul(ud, ws), [0.0, fr, 0.0], across);
                         let g0 = add(add(o0, mul(ud, fr)), add([0.0, fr, 0.0], mul(across, 0.45)));
                         push_box(m.batch("cam"), g0, mul(ud, ws - 2.0 * fr), [0.0, hs - 2.0 * fr, 0.0], mul(across, 0.1));
-                        if ws > 1600.0 {
+                        if o.style == "vasistas" {
+                            // üstten açılır: yatay kayıt
+                            push_box(m.batch(frame_mat), add(o0, [0.0, hs * 0.62, 0.0]), mul(ud, ws), [0.0, fr * 0.8, 0.0], across);
+                        }
+                        if ws > 1600.0 && o.style != "sabit" {
                             let n = (ws / 1200.0).floor() as i32;
                             for k in 1..=n {
                                 let x = ws * k as f64 / (n + 1) as f64;
@@ -501,6 +518,16 @@ pub fn build(scene: &Scene, opt: &MeshOptions) -> SceneMesh {
                         if w.exterior {
                             let l0 = add(add(o0, mul(ud, fr)), mul(across, 0.3));
                             push_box(m.batch("kapi-ahsap"), l0, mul(ud, ws - 2.0 * fr), [0.0, hs - fr, 0.0], mul(across, 0.4));
+                        } else if o.style == "cift" {
+                            // çift kanat: iki yarım kanat, ikisi de 90° açık
+                            let inward = !o.swing.ends_with("disa");
+                            let dir = if inward { -1.0 } else { 1.0 };
+                            let lw = (ws - 2.0 * fr) / 2.0;
+                            for (hx, sgn) in [(fr, 1.0), (ws - fr, -1.0)] {
+                                let leaf = [right[0] * dir * lw, 0.0, right[1] * dir * lw];
+                                let p = add(world(p0, base), add(mul(ud, hx), mul([right[0] * dir, 0.0, right[1] * dir], half)));
+                                push_box(m.batch("kapi-ahsap"), p, mul(ud, 40.0 * sgn), [0.0, hs - fr - 10.0, 0.0], leaf);
+                            }
                         } else {
                             // iç kapı kanadı 90° açık, menteşe tarafına göre
                             let hinge_right = o.swing.starts_with("sag");

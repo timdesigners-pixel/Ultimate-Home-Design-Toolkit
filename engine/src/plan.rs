@@ -117,7 +117,35 @@ pub fn place_opening(level: &Level, std_id: &str, p: P2, id: String) -> Result<O
     let len = w.length();
     let offset = ((t - s.width / 2.0) / 100.0).round() * 100.0;
     let offset = offset.clamp(0.0, (len - s.width).max(0.0));
-    let o = Opening { id, wall: wid, kind: s.kind, offset, width: s.width, height: s.height, sill: s.sill, price: 0.0, swing: "sol-ice".into() };
+    let o = Opening { id, wall: wid, kind: s.kind, offset, width: s.width, height: s.height, sill: s.sill, price: 0.0, swing: "sol-ice".into(), style: String::new() };
+    validate_opening(level, &o)?;
+    Ok(o)
+}
+
+/// Her ölçüde açıklık: tıklanan noktaya ortalanır, 1 cm'ye yuvarlanır.
+/// `style`: kapıda "" / cift / surgu / cam, pencerede "" / sabit / vasistas / surgu.
+pub fn place_custom_opening(level: &Level, kind: OpeningKind, style: &str, width: f64, height: f64, sill: f64, p: P2, id: String) -> Result<Opening, String> {
+    let ok_style = match kind {
+        OpeningKind::Door => ["", "cift", "surgu", "cam"].contains(&style),
+        OpeningKind::Window => ["", "sabit", "vasistas", "surgu"].contains(&style),
+    };
+    if !ok_style {
+        return Err("@unknown_opening".into());
+    }
+    if !(width.is_finite() && height.is_finite() && sill.is_finite()) || width < 300.0 || width > 8000.0 || height < 300.0 || height > 6000.0 || sill < 0.0 {
+        return Err("@opening_size_invalid".into());
+    }
+    let (wid, t, d) = nearest_wall(level, p).ok_or("@no_walls")?;
+    let w = level.walls.iter().find(|w| w.id == wid).unwrap();
+    if d > w.thickness * 0.5 + 400.0 {
+        return Err("@click_on_wall".into());
+    }
+    let r10 = |x: f64| (x / 10.0).round() * 10.0;
+    let len = w.length();
+    let width = r10(width);
+    let offset = r10(t - width / 2.0).clamp(0.0, (len - width).max(0.0));
+    let sill = if kind == OpeningKind::Door { 0.0 } else { r10(sill) };
+    let o = Opening { id, wall: wid, kind, offset, width, height: r10(height), sill, price: 0.0, swing: "sol-ice".into(), style: style.into() };
     validate_opening(level, &o)?;
     Ok(o)
 }
@@ -441,6 +469,18 @@ mod tests {
         let mut open = s.clone();
         open.levels[0].walls.retain(|w| w.id != "M1-B0");
         assert!(detect_room(&open.levels[0], [5000.0, 2000.0]).unwrap_err() == "@area_not_closed");
+    }
+
+    #[test]
+    fn custom_openings_on_angled_wall() {
+        let mut l = Level::default();
+        l.walls.push(Wall { id: "B1".into(), a: [0.0, 0.0], b: [3000.0, 3000.0], thickness: 100.0, ..Default::default() });
+        let o = place_custom_opening(&l, OpeningKind::Door, "cift", 1400.0, 2200.0, 0.0, [2100.0, 2100.0], "K1".into()).unwrap();
+        assert_eq!((o.width, o.style.as_str()), (1400.0, "cift"));
+        assert!((o.offset + 700.0 - 2969.8).abs() < 15.0, "{}", o.offset);
+        assert!(place_custom_opening(&l, OpeningKind::Window, "cift", 1000.0, 1000.0, 900.0, [2100.0, 2100.0], "P1".into()).is_err());
+        assert!(place_custom_opening(&l, OpeningKind::Window, "sabit", 100.0, 1000.0, 900.0, [2100.0, 2100.0], "P1".into()).is_err());
+        assert!(place_custom_opening(&l, OpeningKind::Window, "sabit", 5000.0, 1000.0, 900.0, [2100.0, 2100.0], "P1".into()).unwrap_err().starts_with("@opening_too_wide"));
     }
 
     #[test]

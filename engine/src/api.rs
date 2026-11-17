@@ -265,6 +265,27 @@ fn dispatch(cmd: &str, payload: &str) -> Result<Value, String> {
             let l = s.levels.iter().find(|l| l.id == level).ok_or("@level_not_found")?;
             Ok(serde_json::to_value(plan::detect_room(l, p)?).unwrap())
         }
+        "place_custom_opening" => {
+            let mut s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let p: [f64; 2] = arg(&v, "point")?;
+            let kind: String = arg(&v, "kind")?;
+            let kind = if kind == "window" { crate::model::OpeningKind::Window } else { crate::model::OpeningKind::Door };
+            let style: String = opt(&v, "style").unwrap_or_default();
+            let mut k = s.levels.iter().map(|l| l.openings.len()).sum::<usize>() + 1;
+            let prefix = if kind == crate::model::OpeningKind::Door { "K" } else { "P" };
+            let id = loop {
+                let c = format!("{prefix}{k}");
+                if !s.levels.iter().any(|l| l.openings.iter().any(|o| o.id == c)) {
+                    break c;
+                }
+                k += 1;
+            };
+            let l = s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?;
+            let o = plan::place_custom_opening(l, kind, &style, arg(&v, "width")?, arg(&v, "height")?, opt(&v, "sill").unwrap_or(900.0), p, id)?;
+            l.openings.push(o.clone());
+            finish(s, json!({"opening": o}))
+        }
         "place_opening" => {
             let mut s = scene_of(&v)?;
             let level: String = arg(&v, "level")?;

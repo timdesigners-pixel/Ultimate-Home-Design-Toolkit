@@ -156,7 +156,7 @@ fn op(s: &mut Scene, wall: &str, std: &str, offset: f64, sill: Option<f64>) {
     let st = crate::plan::standard_openings().into_iter().find(|o| o.id == std).unwrap();
     let l = &mut s.levels[0];
     let id = format!("{}{}", if st.kind == OpeningKind::Door { "K" } else { "P" }, l.openings.len() + 1);
-    l.openings.push(Opening { id, wall: wall.into(), kind: st.kind, offset, width: st.width, height: st.height, sill: sill.unwrap_or(st.sill), price: 0.0, swing: "sol-ice".into() });
+    l.openings.push(Opening { id, wall: wall.into(), kind: st.kind, offset, width: st.width, height: st.height, sill: sill.unwrap_or(st.sill), price: 0.0, swing: "sol-ice".into(), style: String::new() });
 }
 
 /// Örnek proje: iki adet 4 × 10 modül, bölmeler, mahaller, kapı/pencere ve mobilya.

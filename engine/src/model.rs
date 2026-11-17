@@ -41,6 +41,9 @@ pub struct Scene {
     /// Genişleme paketi şablonundan kurulduysa şablon kimliği (ör. "th-72").
     #[serde(skip_serializing_if = "String::is_empty")]
     pub pack_preset: String,
+    /// Kat başına plan altlıkları.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub underlays: Vec<Underlay>,
 }
 
 impl Default for Scene {
@@ -68,6 +71,7 @@ impl Default for Scene {
             spaces: vec![],
             paint_systems: vec![],
             pack_preset: String::new(),
+            underlays: vec![],
         }
     }
 }
@@ -271,11 +275,36 @@ pub struct Opening {
     pub price: f64,
     /// Kapı açılımı: sol/sağ menteşe, içe/dışa.
     pub swing: String,
+    /// Biçim: boş (tek kanat / açılır pencere), cift (çift kanat), surgu (sürgülü cam),
+    /// cam (camlı kapı), sabit (sabit cam), vasistas (üstten açılır).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub style: String,
 }
 impl Default for Opening {
     fn default() -> Self {
-        Opening { id: String::new(), wall: String::new(), kind: OpeningKind::Door, offset: 500.0, width: 900.0, height: 2350.0, sill: 0.0, price: 0.0, swing: "sol-ice".into() }
+        Opening { id: String::new(), wall: String::new(), kind: OpeningKind::Door, offset: 500.0, width: 900.0, height: 2350.0, sill: 0.0, price: 0.0, swing: "sol-ice".into(), style: String::new() }
     }
+}
+
+/// Plan altlığı: taranmış ya da fotoğraflanmış plan resmi, üzerinden çizim için.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Underlay {
+    pub level: String,
+    /// "image/png" ya da "image/jpeg"
+    pub mime: String,
+    /// base64 görüntü (arayüz en çok 2400 piksele küçültür)
+    pub data: String,
+    pub width_px: f64,
+    pub height_px: f64,
+    /// Resmin sol üst köşesinin plan konumu (mm)
+    pub x: f64,
+    pub y: f64,
+    /// Ölçek: bir pikselin mm karşılığı (iki nokta ve gerçek uzunlukla bulunur)
+    pub mm_per_px: f64,
+    /// Saydamlık 0–1
+    pub opacity: f64,
+    pub visible: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
