@@ -997,7 +997,10 @@
     "pack_no_space": "Projede paket gövdesi yok.",
     "pack_hub_no_key": "Hub istemci anahtarı kayıtlı değil. Hub'da bu uygulamaya “catalog.read” izni verip anahtarı MyMind ekranından kaydedin.",
     "pack_hub_offline": "PluginLabs Hub'a ulaşılamadı. Hub'ı açıp “Lisansları yenile”ye basın.",
-    "pack_desktop_only": "Paket lisansları masaüstü uygulamasında PluginLabs Hub'dan okunur; tarayıcı önizlemesinde paketler kilitlidir."
+    "pack_desktop_only": "Paket lisansları masaüstü uygulamasında PluginLabs Hub'dan okunur; tarayıcı önizlemesinde paketler kilitlidir.",
+    "mobile_files": "Bu cihazda dosya, uygulamanın kendi dosya seçicisiyle açılır.",
+    "mobile_cycles": "Cycles render yalnız Windows masaüstü uygulamasında kullanılır; bu cihazda dahili render motoru çalışır.",
+    "mobile_save_failed": "Dosya kaydedilemedi. Cihazda yer olduğundan ve uygulamanın depolama izni bulunduğundan emin olun."
   },
   "catalog": {
     "kanepe-3": "Üçlü kanepe",

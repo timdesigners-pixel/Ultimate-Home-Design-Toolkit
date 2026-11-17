@@ -997,7 +997,10 @@
     "pack_no_space": "The project has no pack shell.",
     "pack_hub_no_key": "No Hub client key is saved. Grant this app the “catalog.read” permission in Hub and save the key on the MyMind screen.",
     "pack_hub_offline": "PluginLabs Hub could not be reached. Open Hub and press “Refresh licences”.",
-    "pack_desktop_only": "Pack licences are read from PluginLabs Hub in the desktop app; packs are locked in the browser preview."
+    "pack_desktop_only": "Pack licences are read from PluginLabs Hub in the desktop app; packs are locked in the browser preview.",
+    "mobile_files": "On this device files are opened with the app's own file picker.",
+    "mobile_cycles": "Cycles rendering is only available in the Windows desktop app; this device uses the built-in renderer.",
+    "mobile_save_failed": "The file could not be saved. Make sure the device has free space and the app has storage permission."
   },
   "catalog": {
     "kanepe-3": "Three-seater sofa",

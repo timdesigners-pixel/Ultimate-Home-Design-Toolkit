@@ -6,6 +6,10 @@ authors = ["PluginLabs"]
 license = "MIT"
 edition = "2021"
 
+[lib]
+name = "ultimate_home_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "=2.7.4", features = [] }
 
@@ -13,11 +17,13 @@ tauri-build = { version = "=2.7.4", features = [] }
 tauri = { version = "=2.12.5", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rfd = "0.15"
 base64 = "0.22"
 ureq = { version = "2", default-features = false, features = ["json", "tls"] }
 md-5 = "0.10"
 uhd-engine = { path = "../engine" }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+rfd = "0.15"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"] }

@@ -1647,7 +1647,7 @@ async function init() {
   V.hooks = hooks3d;
   try {
     const info = await B.engine("info");
-    $("#engineInfo").textContent = `${L("app.rust_motoru", { version: info.version, p: B.isDesktop ? L("app.yerel") : L("app.webassembly_onizleme") })}`;
+    $("#engineInfo").textContent = `${L("app.rust_motoru", { version: info.version, p: B.isNative ? L("app.yerel") : L("app.webassembly_onizleme") })}`;
     S.catalog = await B.engine("catalog");
     S.paint.ral = (await B.engine("paint_systems"))[0].colors;
     // görünen adlar seçili dile çevrilir; motorun özgün adları eşleştirme için saklanır
@@ -1801,7 +1801,7 @@ document.addEventListener("click", (e) => {
     real.classList.add("is-loading");
     run(async () => {
       try {
-        const r = await B.engine("object_render", { scene: S.scene, cat: id, width: 400, height: 300, samples: B.isDesktop ? 48 : 12 });
+        const r = await B.engine("object_render", { scene: S.scene, cat: id, width: 400, height: 300, samples: B.isNative ? 48 : 12 });
         S.thumbs[id] = r.png;
         const box = $(`[data-thumb="${id}"]`);
         if (box) box.innerHTML = `<img src="data:image/png;base64,${r.png}" alt="${L("app.gercekci_onizleme_2")}">`;
@@ -1864,7 +1864,7 @@ $("#btnMotorReal").onclick = () => run(async () => {
   const b = $("#btnMotorReal");
   b.classList.add("is-loading");
   try {
-    const r = await B.engine("object_render", { scene: S.scene, motor: S.motor, params: S.motorParams[S.motor], width: 720, height: 520, samples: B.isDesktop ? 64 : 16 });
+    const r = await B.engine("object_render", { scene: S.scene, motor: S.motor, params: S.motorParams[S.motor], width: 720, height: 520, samples: B.isNative ? 64 : 16 });
     $("#motorReal").src = `data:image/png;base64,${r.png}`;
     $("#motorReal").hidden = false;
   } finally { b.classList.remove("is-loading"); }

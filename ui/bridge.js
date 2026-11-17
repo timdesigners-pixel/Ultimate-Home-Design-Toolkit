@@ -3,7 +3,11 @@
  * Tarayıcı önizlemesi: aynı Rust motoru WebAssembly işçisinde; dosyalar tarayıcı indirme/yükleme ile. */
 import { t as L, tr as LM } from "./i18n.js";
 const T = window.__TAURI__ && window.__TAURI__.core;
-export const isDesktop = !!T;
+/** Android/iOS kabuğu: dosya seçimi arayüzden yapılır, Cycles ve sistem dosya penceresi yoktur. */
+export const isMobile = !!T && /Android|iPhone|iPad/i.test(navigator.userAgent);
+export const isDesktop = !!T && !isMobile;
+/** Rust motoru yerel (masaüstü ya da mobil) çalışıyor mu. */
+export const isNative = !!T;
 
 let worker = null;
 let seq = 0;
@@ -66,7 +70,7 @@ export async function savePng(name, b64) {
 
 /** Dosya açar. kind: uhds | obj. Dönüş: [{name, text}] */
 export async function openFiles(kind) {
-  if (T) return T.invoke("open_files", { kind });
+  if (T && !isMobile) return T.invoke("open_files", { kind });
   const input = document.getElementById("fileInput");
   input.value = "";
   input.multiple = kind === "obj";
@@ -127,7 +131,7 @@ export async function filesToModel(list) {
   return { main: main.name, files, name: main.name.replace(/\.(glb|gltf)$/i, "") };
 }
 export async function openModel() {
-  if (T) return T.invoke("open_model");
+  if (T && !isMobile) return T.invoke("open_model");
   const input = document.getElementById("modelInput");
   input.value = "";
   return new Promise((res) => {
@@ -140,7 +144,7 @@ export async function hubStatus() {
   if (!T) return { available: false, reason: L("bridge.mymind_yalniz_masaustu_uygulamasinda") };
   return T.invoke("hub_status");
 }
-export async function cyclesStatus() { return T ? T.invoke("cycles_status") : { available: false, browser: true }; }
+export async function cyclesStatus() { return T && !isMobile ? T.invoke("cycles_status") : { available: false, browser: true }; }
 export async function cyclesPick() { return T.invoke("cycles_pick"); }
 export async function cyclesCancel() { if (T) await T.invoke("cycles_cancel"); }
 /** Cycles render: ilerleme satırları onProgress ile bildirilir. */
