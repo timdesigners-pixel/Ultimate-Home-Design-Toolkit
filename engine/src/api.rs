@@ -215,6 +215,41 @@ fn dispatch(cmd: &str, payload: &str) -> Result<Value, String> {
             s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?.walls.push(w.clone());
             finish(s, json!({"wall": w}))
         }
+        "add_wall" => {
+            let mut s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let a: [f64; 2] = arg(&v, "a")?;
+            let b: [f64; 2] = arg(&v, "b")?;
+            let mut k = s.levels.iter().map(|l| l.walls.len()).sum::<usize>() + 1;
+            let id = loop {
+                let c = format!("B{k}");
+                if !s.levels.iter().any(|l| l.walls.iter().any(|w| w.id == c)) {
+                    break c;
+                }
+                k += 1;
+            };
+            let w = plan::free_wall(&s, a, b, id, opt(&v, "thickness"), opt(&v, "arc").unwrap_or(0.0), opt(&v, "height"))?;
+            s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?.walls.push(w.clone());
+            finish(s, json!({"wall": w}))
+        }
+        "snap" => {
+            let s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let p: [f64; 2] = arg(&v, "point")?;
+            let from: Option<[f64; 2]> = opt(&v, "from");
+            let d = crate::walls::Snap::default();
+            let snap = crate::walls::Snap { grid: opt(&v, "grid").unwrap_or(d.grid), angle: opt(&v, "angle").unwrap_or(d.angle), magnet: opt(&v, "magnet").unwrap_or(d.magnet) };
+            let l = s.levels.iter().find(|l| l.id == level).ok_or("@level_not_found")?;
+            let (q, kind) = crate::walls::snap(l, p, from, snap);
+            Ok(json!({"point": q, "kind": kind}))
+        }
+        "wall_outline" => {
+            // plan çizimi için eğri duvar orta çizgileri
+            let s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let l = s.levels.iter().find(|l| l.id == level).ok_or("@level_not_found")?;
+            Ok(json!(l.walls.iter().filter(|w| w.arc.abs() >= 1.0).map(|w| (w.id.clone(), crate::walls::centerline(w))).collect::<std::collections::BTreeMap<_, _>>()))
+        }
         "name_room" => {
             let mut s = scene_of(&v)?;
             let level: String = arg(&v, "level")?;

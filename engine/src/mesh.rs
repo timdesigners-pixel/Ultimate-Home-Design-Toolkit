@@ -231,6 +231,27 @@ fn world(p: [f64; 2], y: f64) -> V3 {
     [p[0], y, p[1]]
 }
 
+/// Dışbükey çokgen tabanlı dik prizma (köşe dolgusu).
+fn prism(b: &mut Batch, poly: &[[f64; 2]], y0: f64, y1: f64) {
+    let c = geom::centroid(poly);
+    for i in 0..poly.len() {
+        let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+        let mid = [(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0];
+        quad(b, world(p, y0), [q[0] - p[0], 0.0, q[1] - p[1]], [0.0, y1 - y0, 0.0], [mid[0] - c[0], 0.0, mid[1] - c[1]]);
+    }
+    for t in geom::triangulate(poly) {
+        for (y, up) in [(y1, 1.0f32), (y0, -1.0)] {
+            let (a, bb, d) = (world(poly[t[0]], y), world(poly[t[1]], y), world(poly[t[2]], y));
+            let n = cross([bb[0] - a[0], bb[1] - a[1], bb[2] - a[2]], [d[0] - a[0], d[1] - a[1], d[2] - a[2]]);
+            let order = if (n[1] >= 0.0) == (up > 0.0) { [a, bb, d] } else { [a, d, bb] };
+            for v in order {
+                b.positions.push(f(v));
+                b.normals.push([0.0, up, 0.0]);
+            }
+        }
+    }
+}
+
 /// Dikdörtgenden dikdörtgen delik çıkararak en çok 4 dikdörtgen döner.
 fn rect_minus(r: ([f64; 2], [f64; 2]), h: ([f64; 2], [f64; 2])) -> Vec<([f64; 2], [f64; 2])> {
     let (mn, mx) = r;
@@ -354,8 +375,14 @@ pub fn build(scene: &Scene, opt: &MeshOptions) -> SceneMesh {
                 }
             }
         }
-        // duvarlar
-        for w in &level.walls {
+        // serbest duvarların eğik birleşimlerinde köşe dolgusu
+        let interior_mat = interior.clone();
+        for (poly, h) in crate::walls::corner_fills(level) {
+            prism(m.batch(&interior_mat), &poly, el, el + h);
+        }
+        // duvarlar (eğri duvarlar kısa düz parçalara bölünür)
+        let expanded = crate::walls::expand(level);
+        for w in &expanded.walls {
             let len = w.length();
             if len < 1.0 {
                 continue;

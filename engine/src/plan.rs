@@ -88,6 +88,9 @@ pub fn validate_opening(level: &Level, o: &Opening) -> Result<(), String> {
     if w.structural {
         return Err("@shear_wall_no_openings".into());
     }
+    if w.arc.abs() >= 1.0 {
+        return Err("@opening_on_curved_wall".into());
+    }
     let len = w.length();
     if o.offset < -0.5 || o.offset + o.width > len + 0.5 {
         return Err(format!("@opening_too_wide|wall={:.2}|opening={:.2}", len / 1000.0, o.width / 1000.0));
@@ -129,6 +132,9 @@ pub struct Detected {
 
 /// Duvarlarla çevrili kapalı alanı bulur (açıklıklar alanı açmaz). Izgara 5–10 mm.
 pub fn detect_room(level: &Level, p: P2) -> Result<Detected, String> {
+    // eğri duvarlar düz parçalara bölünerek taranır
+    let expanded = crate::walls::expand(level);
+    let level = &expanded;
     if level.walls.is_empty() {
         return Err("@no_walls".into());
     }
@@ -274,6 +280,9 @@ pub fn detect_room(level: &Level, p: P2) -> Result<Detected, String> {
             poly.push([(b[0] * 10.0).round() / 10.0, (b[1] * 10.0).round() / 10.0]);
         }
     }
+    // eğik ve eğri kenarlarda ızgara basamaklarını sadeleştir (dik kenarlar aynen kalır)
+    let poly = if poly.len() > 8 { crate::walls::simplify(&poly, cell * 1.6) } else { poly };
+    let poly: Vec<P2> = poly.iter().map(|p| [(p[0] * 10.0).round() / 10.0, (p[1] * 10.0).round() / 10.0]).collect();
     let (bmn, bmx) = geom::bbox(&poly);
     Ok(Detected {
         area_m2: ((count as f64 * cell * cell / 1e6) * 100.0).round() / 100.0,
@@ -360,6 +369,25 @@ pub fn partition(scene: &Scene, a: P2, b: P2, id: String, thickness: Option<f64>
     }
     let t = thickness.filter(|t| t.is_finite()).map(|t| t.clamp(50.0, 400.0)).unwrap_or(scene.standard.partition);
     Ok(Wall { id, a, b, thickness: t, ..Default::default() })
+}
+
+/// Serbest duvar: her açıda, isteğe bağlı eğri (`arc`, mm) ve yükseklik. Uçlar çağıran
+/// tarafından yakalanmış (bkz. `walls::snap`) gelir; burada yalnız 1 mm'ye yuvarlanır.
+pub fn free_wall(scene: &Scene, a: P2, b: P2, id: String, thickness: Option<f64>, arc: f64, height: Option<f64>) -> Result<Wall, String> {
+    let r = |p: P2| [p[0].round(), p[1].round()];
+    let (a, b) = (r(a), r(b));
+    if !(a[0].is_finite() && a[1].is_finite() && b[0].is_finite() && b[1].is_finite()) {
+        return Err("@partition_too_short".into());
+    }
+    let chord = geom::dist(a, b);
+    if chord < 200.0 {
+        return Err("@partition_too_short".into());
+    }
+    let t = thickness.filter(|t| t.is_finite()).map(|t| t.clamp(50.0, 600.0)).unwrap_or(scene.standard.partition);
+    // yay oku en çok kirişin yarısı (yarım daire)
+    let arc = if arc.is_finite() { arc.clamp(-chord / 2.0, chord / 2.0).round() } else { 0.0 };
+    let height = height.filter(|h| h.is_finite()).map(|h| h.clamp(300.0, 8000.0));
+    Ok(Wall { id, a, b, thickness: t, arc, height, ..Default::default() })
 }
 
 #[cfg(test)]

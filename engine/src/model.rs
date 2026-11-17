@@ -218,13 +218,16 @@ pub struct Wall {
     pub band: String,
     #[serde(skip_serializing_if = "is_zero_f")]
     pub band_h: f64,
+    /// Eğri duvar: kirişin ortasından yay tepesine uzaklık (mm); + sola, − sağa büker. 0: düz.
+    #[serde(skip_serializing_if = "is_zero_f")]
+    pub arc: f64,
 }
 fn is_zero_f(v: &f64) -> bool {
     *v == 0.0
 }
 impl Default for Wall {
     fn default() -> Self {
-        Wall { id: String::new(), a: [0.0, 0.0], b: [1000.0, 0.0], thickness: 100.0, height: None, material: String::new(), exterior: false, structural: false, generated: false, outer: String::new(), outside: 0, shell: None, lower: String::new(), split: 0.0, band: String::new(), band_h: 0.0 }
+        Wall { id: String::new(), a: [0.0, 0.0], b: [1000.0, 0.0], thickness: 100.0, height: None, material: String::new(), exterior: false, structural: false, generated: false, outer: String::new(), outside: 0, shell: None, lower: String::new(), split: 0.0, band: String::new(), band_h: 0.0, arc: 0.0 }
     }
 }
 impl Wall {
@@ -237,8 +240,9 @@ impl Wall {
         self.band = old.band.clone();
         self.band_h = old.band_h;
     }
+    /// Orta çizgi uzunluğu; eğri duvarda yay uzunluğu.
     pub fn length(&self) -> f64 {
-        crate::geom::dist(self.a, self.b)
+        crate::walls::length(self)
     }
     pub fn h(&self, level: &Level) -> f64 {
         self.height.unwrap_or(level.height)
