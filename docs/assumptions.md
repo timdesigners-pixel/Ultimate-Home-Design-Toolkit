@@ -10,7 +10,7 @@ Kullanıcı, ayrı bir depo kökü `CLAUDE.md` taslağı paylaştı: wgpu 0.20, 
 
 Bu taslak uygulanmadı; gerekçeler:
 
-- Ürün şu an PluginLabs deposunun içinde (`apps/07-yeni-urunler/PL-060-…`). Depo kökündeki `CLAUDE.md` ve `AGENTS.md` tüm PluginLabs ürünlerinin ortak kurallarıdır; üzerine yazmak diğer ürünleri ve Codex ile ortak çalışmayı bozar.
+- Ürün kendi deposundadır (`timdesigners-pixel/ultimate-home-design-toolkit`). Ortak PluginLabs kuralları PluginLabs deposunun `AGENTS.md` dosyasındadır; bu deponun `AGENTS.md` dosyası yalnız ürüne özgü kuralları ekler.
 - Taslak “çelişkide bu dosya önceliklidir” diyor; PluginLabs şartnamesi (Tasarım Sistemi, Hub'dan kurulum, MyMind, Türkçe rapor) ile çelişiyor.
 - Çalışan uygulama Tauri 2 + HTML arayüz + Rust motorudur ve PR #116 ile `main`'e girdi. egui/Bevy'ye geçiş arayüzün tamamen yeniden yazılması ve PluginLabs Advanced tasarım sisteminin bırakılması demektir.
 
