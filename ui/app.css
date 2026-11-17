@@ -318,3 +318,6 @@ html, body { margin: 0; height: 100%; }
   .uh-packgrid, .uh-libgrid, .uh-swgrid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .uh-packgrid { grid-template-columns: 1fr; }
 }
+
+/* Android: sistem çubuklarının (durum çubuğu, gezinme) altında kalmamak için güvenli alan boşluğu */
+.uh { box-sizing: border-box; padding-top: var(--uh-safe-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--uh-safe-bottom, env(safe-area-inset-bottom, 0px)); }

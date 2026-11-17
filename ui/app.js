@@ -1279,6 +1279,16 @@ function renderMaterials() {
       <div class="uh-matcard__row">${priced ? `<input class="pl-input uh-cell-input" type="number" min="0" step="10" value="${m.price_m2}" data-mat-price="${m.id}" aria-label="${L("app.m2_fiyati", { p: esc(N.matName(m)) })}"><span class="uh-small">₺/m²</span>` : ""}<span class="uh-grow"></span><button class="pl-btn pl-btn--secondary pl-btn--sm" type="button" data-mat-apply="${m.id}">${L("app.uygula")}</button></div>
     </div></div>`).join("") || `<p class="uh-small">${L("app.bu_turde_kaplama_yok")}</p>`;
 }
+/** Android WebView güvenli alan değerini bildirmezse durum çubuğu kadar boşluk bırakılır. */
+function mobileSafeArea() {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;top:0;left:0;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none";
+  document.body.appendChild(probe);
+  const top = probe.getBoundingClientRect().height;
+  probe.remove();
+  if (top < 1) document.documentElement.style.setProperty("--uh-safe-top", "28px");
+}
+
 /* ---------- Genişleme paketleri (Hub'dan lisanslı) ---------- */
 const packOwned = (id) => !!(S.packs || []).find((p) => p.id === id && p.owned);
 async function loadPacks() {
@@ -1648,6 +1658,7 @@ async function init() {
   try {
     const info = await B.engine("info");
     $("#engineInfo").textContent = `${L("app.rust_motoru", { version: info.version, p: B.isNative ? L("app.yerel") : L("app.webassembly_onizleme") })}`;
+    if (B.isMobile) mobileSafeArea();
     S.catalog = await B.engine("catalog");
     S.paint.ral = (await B.engine("paint_systems"))[0].colors;
     // görünen adlar seçili dile çevrilir; motorun özgün adları eşleştirme için saklanır

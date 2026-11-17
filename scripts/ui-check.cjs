@@ -5,6 +5,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const root = path.join(__dirname, "..", "ui");
+const APP_CSP = require(path.join(__dirname, "..", "src-tauri", "tauri.conf.json")).app.security.csp;
 const out = process.argv[2] || path.join(__dirname, "..", "docs", "screenshots");
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".woff2": "font/woff2", ".png": "image/png", ".json": "application/json" };
 // Sahte Poly Haven (çevrimdışı test): küçük glTF kanepe ve bir parke doku seti
@@ -66,7 +67,8 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, {
     "Content-Type": types[path.extname(p)] || "application/octet-stream",
     // Tauri yapılandırmasındaki CSP + yalnız önizleme için WebAssembly izni
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
+    // Masaüstü/Android uygulamasının gerçek CSP'si; tarayıcı önizlemesi için yalnız WebAssembly izni eklenir
+    "Content-Security-Policy": APP_CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'"),
   });
   fs.createReadStream(p).pipe(res);
 });

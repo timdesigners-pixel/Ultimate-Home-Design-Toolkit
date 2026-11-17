@@ -1,6 +1,6 @@
 [package]
 name = "ultimate-home"
-version = "0.1.0"
+version = "0.1.1"
 description = "PluginLabs Ultimate Home Design Toolkit — modüler ev tasarımı, ölçü, maliyet ve render"
 authors = ["PluginLabs"]
 license = "MIT"
