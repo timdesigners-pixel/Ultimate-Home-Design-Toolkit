@@ -1000,7 +1000,9 @@
     "pack_desktop_only": "Pack licences are read from PluginLabs Hub in the desktop app; packs are locked in the browser preview.",
     "mobile_files": "On this device files are opened with the app's own file picker.",
     "mobile_cycles": "Cycles rendering is only available in the Windows desktop app; this device uses the built-in renderer.",
-    "mobile_save_failed": "The file could not be saved. Make sure the device has free space and the app has storage permission."
+    "mobile_save_failed": "The file could not be saved. Make sure the device has free space and the app has storage permission.",
+    "opening_on_curved_wall": "Doors and windows cannot be placed on curved walls.",
+    "opening_size_invalid": "Invalid opening size (width 30–800 cm, height 30–600 cm)."
   },
   "catalog": {
     "kanepe-3": "Three-seater sofa",
@@ -1662,5 +1664,44 @@
       "battery_wh": "Battery capacity",
       "autonomy_days": "Autonomy without sun"
     }
+  },
+  "serbest": {
+    "serbest_duvar": "Free wall",
+    "egri_duvar": "Curved wall",
+    "ipucu": "Free wall: click to draw; each click starts the next wall and returning to the start closes the room. Angles lock to 15° (Shift: free angle) and ends snap to existing walls (Alt: no snapping). Type a length in cm and press Enter; Esc finishes. Curved wall: two ends, then the top of the arc.",
+    "ozel_acilik": "Door / window of any size",
+    "plan_altligi": "Plan underlay",
+    "bicim": "Style",
+    "bicim_standart": "Standard",
+    "bicim_cift": "Double leaf",
+    "bicim_surgu": "Sliding glass",
+    "bicim_cam": "Glazed door",
+    "bicim_sabit": "Fixed glass",
+    "bicim_vasistas": "Top-hung",
+    "denizlik": "Sill (cm)",
+    "duvara_yerlestir": "Place on a wall",
+    "ozel_acilik_ipucu": "Enter sizes in cm, then click a wall on the plan. Curved walls cannot take openings.",
+    "altlik_yukle": "Load plan image",
+    "altlik_ipucu": "Use a scanned or photographed plan as an underlay; set the scale with two points and trace walls over it.",
+    "olcek_ayarla": "Set scale (2 points)",
+    "saydamlik": "Opacity",
+    "altligi_goster": "Show underlay",
+    "degistir": "Replace",
+    "olcek": "Scale: 1 pixel = {p} mm",
+    "gercek_uzunluk_cm": "Real length between the two points (cm):",
+    "olcek_ayarlandi": "Underlay scale set",
+    "altlik_yuklendi": "Plan underlay loaded",
+    "olcek_ipucu": "To set the scale, click both ends of a line whose length you know.",
+    "egrilik_cm": "Curvature (cm)",
+    "duvar_yuksekligi_cm": "Wall height (cm)",
+    "egrilik_ipucu": "Curvature is the distance from the middle of the chord to the top of the arc; 0 is straight and a negative value bends the other way. An empty height uses the storey height. Drag the ends of the selected wall to extend or rotate it.",
+    "yeni_proje": "New project",
+    "yeni_proje_aciklama": "How would you like to start?",
+    "tur_serbest": "Free drawing",
+    "tur_serbest_aciklama": "Empty plan: walls at any angle or curved, rooms of any size.",
+    "tur_modul": "Modular house",
+    "tur_modul_aciklama": "Start with ready 4 m wide modules.",
+    "tur_paket_aciklama": "Start from an expansion pack shell.",
+    "serbest_basladi": "Free drawing ready"
   }
 }

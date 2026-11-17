@@ -35,6 +35,47 @@ function distSeg(p, a, b) {
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t);
 }
+/* Eğri duvar geometrisi (motordaki `walls::centerline` ile aynı). */
+function arcParams(w) {
+  const c = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+  const s = w.arc || 0;
+  if (Math.abs(s) < 1 || c < 1) return null;
+  const r = (c * c / 4 + s * s) / (2 * Math.abs(s));
+  const d = [(w.b[0] - w.a[0]) / c, (w.b[1] - w.a[1]) / c];
+  const left = [-d[1], d[0]];
+  const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+  const sign = Math.sign(s);
+  const off = (r - Math.abs(s)) * -sign;
+  const center = [mid[0] + left[0] * off, mid[1] + left[1] * off];
+  const a0 = Math.atan2(w.a[1] - center[1], w.a[0] - center[0]);
+  const a1 = Math.atan2(w.b[1] - center[1], w.b[0] - center[0]);
+  let sweep = a1 - a0;
+  const tau = Math.PI * 2, large = Math.abs(s) > c / 2;
+  if (sign > 0) { while (sweep > 0) sweep -= tau; if (!large && sweep < -Math.PI) sweep += tau; }
+  else { while (sweep < 0) sweep += tau; if (!large && sweep > Math.PI) sweep -= tau; }
+  return { center, r, a0, sweep };
+}
+export function centerline(w) {
+  const p = arcParams(w);
+  if (!p) return [w.a, w.b];
+  const n = Math.min(96, Math.max(4, Math.ceil(Math.abs(p.sweep) / ((6 * Math.PI) / 180))));
+  const pts = [];
+  for (let k = 0; k <= n; k++) { const t = p.a0 + (p.sweep * k) / n; pts.push([p.center[0] + p.r * Math.cos(t), p.center[1] + p.r * Math.sin(t)]); }
+  pts[0] = w.a;
+  pts[n] = w.b;
+  return pts;
+}
+export function wallLength(w) {
+  const p = arcParams(w);
+  return p ? p.r * Math.abs(p.sweep) : Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+}
+function polyDist(p, pts) {
+  let d = Infinity;
+  for (let i = 0; i + 1 < pts.length; i++) d = Math.min(d, distSeg(p, pts[i], pts[i + 1]));
+  return d;
+}
+const near = (a, b, tol = 1) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tol;
+
 function polyArea(poly) {
   let s = 0;
   for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; s += a[0] * b[1] - b[0] * a[1]; }
@@ -149,6 +190,51 @@ export class PlanCanvas {
     return q;
   }
 
+  /** Serbest çizim yakalaması: duvar uçları, 15° açı (Shift: serbest), 1 cm ızgara, duvar çizgisi (Alt: yapışma kapalı). */
+  freeSnap(p, from, e = {}) {
+    const l = this.levelObj();
+    const magnet = e.altKey ? 0 : Math.max(150, 12 / this.view.s);
+    const walls = l ? l.walls : [];
+    if (magnet) {
+      let best = null, bd = Infinity;
+      for (const w of walls) for (const q of [w.a, w.b]) {
+        const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (d <= magnet && d < bd && !(from && near(from, q))) { bd = d; best = q; }
+      }
+      if (best) return { p: [...best], kind: "uc" };
+    }
+    if (from && !e.shiftKey) {
+      const dx = p[0] - from[0], dy = p[1] - from[1];
+      const step = Math.PI / 12;
+      const ang = Math.round(Math.atan2(dy, dx) / step) * step;
+      const len = Math.round(Math.hypot(dx, dy) / 10) * 10;
+      return { p: [Math.round((from[0] + len * Math.cos(ang)) * 10) / 10, Math.round((from[1] + len * Math.sin(ang)) * 10) / 10], kind: "aci" };
+    }
+    const q = [Math.round(p[0] / 10) * 10, Math.round(p[1] / 10) * 10];
+    if (magnet) {
+      let best = null, bd = Infinity;
+      for (const w of walls) {
+        if (w.arc) continue;
+        const d = distSeg(p, w.a, w.b);
+        if (d <= magnet / 2 && d < bd) {
+          const dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1];
+          const t = Math.max(0, Math.min(1, ((p[0] - w.a[0]) * dx + (p[1] - w.a[1]) * dy) / (dx * dx + dy * dy || 1)));
+          bd = d;
+          best = [Math.round((w.a[0] + dx * t) * 10) / 10, Math.round((w.a[1] + dy * t) * 10) / 10];
+        }
+      }
+      if (best) return { p: best, kind: "duvar" };
+    }
+    return { p: q, kind: from ? "serbest" : "izgara" };
+  }
+  /** Yazılan uzunluk (cm) varsa başlangıçtan imleç yönünde o uzunlukta nokta. */
+  typedPoint(from, toward) {
+    const v = parseFloat(String(this.typed || "").replace(",", "."));
+    if (!from || !toward || !(v > 0)) return null;
+    const dx = toward[0] - from[0], dy = toward[1] - from[1], l = Math.hypot(dx, dy) || 1;
+    return [Math.round((from[0] + (dx / l) * v * 10) * 10) / 10, Math.round((from[1] + (dy / l) * v * 10) * 10) / 10];
+  }
+
   snap50(p, from) {
     const q = [Math.round(p[0] / 50) * 50, Math.round(p[1] / 50) * 50];
     if (from) { if (Math.abs(q[0] - from[0]) >= Math.abs(q[1] - from[1])) q[1] = from[1]; else q[0] = from[0]; }
@@ -223,7 +309,7 @@ export class PlanCanvas {
     if (!l) return null;
     let best = null, bd = Infinity;
     for (const w of l.walls) {
-      const d = distSeg(p, w.a, w.b);
+      const d = w.arc ? polyDist(p, centerline(w)) : distSeg(p, w.a, w.b);
       if (d <= w.thickness / 2 + 6 / this.view.s && d < bd) { bd = d; best = { type: "wall", id: w.id }; }
     }
     return best;
@@ -252,8 +338,8 @@ export class PlanCanvas {
 
   /* ---------- olaylar ---------- */
   down(e) {
-    this.c.focus();
-    const p = this.toWorld(e);
+    if (this.c.focus) this.c.focus();
+    const p = e.worldOverride || this.toWorld(e);
     if (e.button === 1 || e.button === 2 || this.space) {
       this.drag = { kind: "pan", x: e.clientX, y: e.clientY, ox: this.view.ox, oy: this.view.oy };
       this.c.setPointerCapture(e.pointerId);
@@ -274,6 +360,19 @@ export class PlanCanvas {
     }
     const t = this.tool;
     if (t.type === "select") {
+      // seçili serbest duvarın ucu: sürükleyerek uzat/döndür; bu uca bağlı duvarlar birlikte gelir
+      if (this.sel && this.sel.type === "wall") {
+        const w = this.levelObj().walls.find((x) => x.id === this.sel.id);
+        const r = 10 / this.view.s;
+        const end = w && !w.generated ? (near(p, w.a, r) ? "a" : near(p, w.b, r) ? "b" : null) : null;
+        if (end) {
+          const at = w[end];
+          const joined = this.levelObj().walls.filter((x) => !x.generated).flatMap((x) => ["a", "b"].filter((k) => near(x[k], at)).map((k) => ({ id: x.id, end: k })));
+          this.drag = { kind: "wallend", id: w.id, end, other: [...w[end === "a" ? "b" : "a"]], joined, moved: false };
+          this.c.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
       const ho = this.hitHandle(p);
       if (ho) {
         this.drag = { kind: "scale", id: ho.id, base: this.objBase(ho), moved: false };
@@ -314,7 +413,36 @@ export class PlanCanvas {
         if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 200) this.on("wall", { a, b });
         if (!e.shiftKey) this.wallStart = null;
       }
-    } else if (t.type === "room") this.on("room", { point: p, kind: t.value });
+    } else if (t.type === "freewall") {
+      const s = this.free || (this.free = { start: null, end: null, first: null });
+      const snapped = this.typedPoint(s.start, this.freeSnap(p, s.start, e).p) || this.freeSnap(p, s.start, e).p;
+      this.typed = "";
+      if (t.value === "arc") {
+        if (!s.start) s.start = snapped;
+        else if (!s.end) { if (Math.hypot(snapped[0] - s.start[0], snapped[1] - s.start[1]) >= 200) s.end = snapped; }
+        else {
+          const a = s.start, b = s.end;
+          const c = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+          const left = [-(b[1] - a[1]) / c, (b[0] - a[0]) / c];
+          const arc = Math.round((p[0] - (a[0] + b[0]) / 2) * left[0] + (p[1] - (a[1] + b[1]) / 2) * left[1]);
+          this.free = null;
+          this.on("freewall", { a, b, arc });
+        }
+      } else if (!s.start) { s.start = snapped; s.first = snapped; }
+      else {
+        const a = s.start;
+        if (Math.hypot(snapped[0] - a[0], snapped[1] - a[1]) >= 200) {
+          this.on("freewall", { a, b: snapped, arc: 0 });
+          // başlangıç noktasına dönünce zincir kapanır
+          if (s.first && near(snapped, s.first, 1)) this.free = null; else s.start = snapped;
+        }
+      }
+    } else if (t.type === "calib") {
+      const q = [Math.round(p[0]), Math.round(p[1])];
+      if (!this.calibStart) this.calibStart = q;
+      else { const a = this.calibStart; this.calibStart = null; if (Math.hypot(q[0] - a[0], q[1] - a[1]) > 1) this.on("calibrate", { a, b: q }); }
+    } else if (t.type === "customopen") this.on("customopen", { point: p });
+    else if (t.type === "room") this.on("room", { point: p, kind: t.value });
     else if (t.type === "opening") this.on("opening", { point: p, std: t.value });
     else if (t.type === "furniture") this.on("furniture", { point: this.snap(p), cat: t.value });
     else if (t.type === "clad") {
@@ -327,6 +455,7 @@ export class PlanCanvas {
   move(e) {
     const p = this.toWorld(e);
     this.hover = p;
+    this.mods = { shiftKey: e.shiftKey, altKey: e.altKey };
     const d = this.drag;
     if (d && d.kind === "pan") {
       this.view.ox = d.ox + (e.clientX - d.x);
@@ -347,6 +476,13 @@ export class PlanCanvas {
       const cl = (v) => Math.max(0.2, Math.min(5, Math.round(v * 100) / 100));
       let sx = cl((Math.round((lx * 2) / 50) * 50) / d.base[0]), sz = cl((Math.round((lz * 2) / 50) * 50) / d.base[1]);
       if (e.shiftKey) { const k = Math.max(sx, sz); o.scale = [k, k, k]; } else o.scale = [sx, o.scale[1], sz];
+      d.moved = true;
+    } else if (d && d.kind === "wallend") {
+      const q = this.freeSnap(p, d.other, e).p;
+      for (const j of d.joined) {
+        const w = this.levelObj().walls.find((x) => x.id === j.id);
+        if (w) w[j.end] = [...q];
+      }
       d.moved = true;
     } else if (d && d.kind === "wall") {
       const w = this.levelObj().walls.find((x) => x.id === d.id);
@@ -371,7 +507,7 @@ export class PlanCanvas {
       const m = this.scene.modules.find((x) => x.id === d.id);
       this.on("move_module", { id: d.id, position: m.position });
     } else if ((d.kind === "object" || d.kind === "scale") && d.moved) this.on("object_moved", { id: d.id });
-    else if (d.kind === "wall" && d.moved) this.on("wall_moved", { id: d.id });
+    else if ((d.kind === "wall" || d.kind === "wallend") && d.moved) this.on("wall_moved", { id: d.id });
   }
 
   wheel(e) {
@@ -388,7 +524,18 @@ export class PlanCanvas {
 
   key(e) {
     if (e.code === "Space") { this.space = true; e.preventDefault(); return; }
-    if (e.key === "Escape") { this.wallStart = null; this.on("escape"); this.draw(); }
+    if (this.tool.type === "freewall" && this.free && this.free.start) {
+      // uzunluğu yazıp Enter: cm cinsinden
+      if (/^[0-9.,]$/.test(e.key)) { this.typed = (this.typed || "") + e.key; e.preventDefault(); this.draw(); return; }
+      if (e.key === "Backspace" && this.typed) { this.typed = this.typed.slice(0, -1); e.preventDefault(); this.draw(); return; }
+      if (e.key === "Enter" && this.typed && this.hover) {
+        e.preventDefault();
+        this.down({ button: 0, pointerId: 0, clientX: 0, clientY: 0, shiftKey: e.shiftKey, altKey: e.altKey, worldOverride: this.hover });
+        return;
+      }
+      if (e.key === "Escape") { this.free = null; this.typed = ""; this.draw(); return; }
+    }
+    if (e.key === "Escape") { this.wallStart = null; this.free = null; this.calibStart = null; this.on("escape"); this.draw(); }
     if ((e.key === "r" || e.key === "R") && this.sel) this.on("rotate", this.sel);
     if ((e.key === "Delete" || e.key === "Backspace") && this.sel) this.on("archive", this.sel);
     const step = e.shiftKey ? 500 : 100;
@@ -430,6 +577,18 @@ export class PlanCanvas {
   }
 
   wallPoly(w) {
+    if (w.arc) {
+      const pts = centerline(w), h = w.thickness / 2;
+      const L = [], R = [];
+      for (let i = 0; i < pts.length; i++) {
+        const p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(pts.length - 1, i + 1)];
+        const l = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+        const n = [-(p1[1] - p0[1]) / l, (p1[0] - p0[0]) / l];
+        L.push([pts[i][0] + n[0] * h, pts[i][1] + n[1] * h]);
+        R.push([pts[i][0] - n[0] * h, pts[i][1] - n[1] * h]);
+      }
+      return [...L, ...R.reverse()];
+    }
     const len = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1;
     const d = [(w.b[0] - w.a[0]) / len, (w.b[1] - w.a[1]) / len];
     const n = [-d[1], d[0]];
@@ -468,7 +627,10 @@ export class PlanCanvas {
       ctx.fillStyle = faint ? C.bg4 : w.structural ? C.fg2 : w.generated ? C.fg4 : C.fg3;
       ctx.fill();
       const sel = this.sel && this.sel.type === "wall" && this.sel.id === w.id;
-      if (sel) { ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.stroke(); }
+      if (sel) {
+        ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.stroke();
+        if (!w.generated) for (const q of [w.a, w.b]) { ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(this.sx(q[0]), this.sy(q[1]), 6, 0, Math.PI * 2); ctx.fill(); }
+      }
       if (!faint && w.outside && w.outer) {
         const m = this.scene.materials.find((x) => x.id === w.outer);
         if (m) {
@@ -511,7 +673,40 @@ export class PlanCanvas {
         ctx.lineTo(this.sx(b[0]), this.sy(b[1]));
         ctx.stroke();
       } else {
-        // kapı kanadı ve açılım yayı
+        // kapı kanadı ve açılım yayı (çift kanatta iki yarım kanat; sürgülü/camlı kapıda kanat yayı yok)
+        if (o.style === "surgu" || o.style === "cam") {
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(this.sx(a[0]), this.sy(a[1]));
+          ctx.lineTo(this.sx(b[0]), this.sy(b[1]));
+          ctx.stroke();
+          continue;
+        }
+        if (o.style === "cift") {
+          let side = !o.swing.endsWith("disa") ? -1 : 1;
+          if (w.outside) side = !o.swing.endsWith("disa") ? -w.outside : w.outside;
+          const rn = [d[1] * side, -d[0] * side];
+          const half = o.width / 2;
+          for (const [hinge, other] of [[a, [a[0] + d[0] * half, a[1] + d[1] * half]], [b, [b[0] - d[0] * half, b[1] - d[1] * half]]]) {
+            const leaf = [hinge[0] + rn[0] * half, hinge[1] + rn[1] * half];
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(this.sx(hinge[0]), this.sy(hinge[1]));
+            ctx.lineTo(this.sx(leaf[0]), this.sy(leaf[1]));
+            ctx.stroke();
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            const a0 = Math.atan2(other[1] - hinge[1], other[0] - hinge[0]);
+            const a1 = Math.atan2(leaf[1] - hinge[1], leaf[0] - hinge[0]);
+            let diff = a1 - a0;
+            while (diff > Math.PI) diff -= 2 * Math.PI;
+            while (diff < -Math.PI) diff += 2 * Math.PI;
+            ctx.arc(this.sx(hinge[0]), this.sy(hinge[1]), half * this.view.s, a0, a1, diff < 0);
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          continue;
+        }
         const right = o.swing.startsWith("sag");
         const inward = !o.swing.endsWith("disa");
         const hinge = right ? b : a;
@@ -553,6 +748,18 @@ export class PlanCanvas {
       const sel = this.sel && this.sel.type === "room" && this.sel.id === r.id;
       ctx.fillStyle = sel ? C.accentSoft : C.bg2;
       ctx.fill();
+    }
+    // plan altlığı
+    for (const u of s.underlays || []) {
+      if (u.level !== this.level || !u.visible || !u.data) continue;
+      const key = `${u.mime}:${u.data.length}:${u.data.slice(-24)}`;
+      this.imgs = this.imgs || {};
+      if (!this.imgs[key]) { const im = new Image(); im.onload = () => this.draw(); im.src = `data:${u.mime};base64,${u.data}`; this.imgs[key] = im; }
+      const im = this.imgs[key];
+      if (!im.complete) continue;
+      ctx.globalAlpha = Math.max(0.05, Math.min(1, u.opacity || 0.5));
+      ctx.drawImage(im, this.sx(u.x), this.sy(u.y), u.width_px * u.mm_per_px * this.view.s, u.height_px * u.mm_per_px * this.view.s);
+      ctx.globalAlpha = 1;
     }
     this.drawWalls(level, false);
     this.drawOpenings(level);
@@ -666,6 +873,50 @@ export class PlanCanvas {
         const len = Math.hypot(p[0] - a[0], p[1] - a[1]);
         this.label(`${fmt(len / 1000, 2)} m`, this.sx((a[0] + p[0]) / 2), this.sy((a[1] + p[1]) / 2) - 14, { mono: true, color: C.fg1, bg: C.bg2 });
       }
+    }
+    if (this.tool.type === "freewall" && this.hover) {
+      const st = this.free || {};
+      const sn = st.end ? { p: this.hover, kind: "serbest" } : this.freeSnap(this.hover, st.start, this.mods || {});
+      const p = this.typedPoint(st.start, sn.p) || sn.p;
+      ctx.fillStyle = sn.kind === "uc" ? C.success : sn.kind === "duvar" ? C.info : C.accent;
+      ctx.beginPath();
+      ctx.arc(this.sx(p[0]), this.sy(p[1]), sn.kind === "uc" ? 6 : 4, 0, Math.PI * 2);
+      ctx.fill();
+      const thick = Math.max(2, (this.tool.thickness || 100) * this.view.s);
+      ctx.strokeStyle = C.accent;
+      ctx.lineWidth = thick;
+      if (st.start && st.end) {
+        const a = st.start, b = st.end, c = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        const left = [-(b[1] - a[1]) / c, (b[0] - a[0]) / c];
+        const arc = (this.hover[0] - (a[0] + b[0]) / 2) * left[0] + (this.hover[1] - (a[1] + b[1]) / 2) * left[1];
+        const w = { a, b, arc: Math.max(-c / 2, Math.min(c / 2, arc)) };
+        const pts = centerline(w);
+        ctx.beginPath();
+        pts.forEach((q, i) => (i ? ctx.lineTo(this.sx(q[0]), this.sy(q[1])) : ctx.moveTo(this.sx(q[0]), this.sy(q[1]))));
+        ctx.stroke();
+        this.label(`${fmt(wallLength(w) / 1000, 2)} m`, this.sx(this.hover[0]), this.sy(this.hover[1]) - 16, { mono: true, color: C.fg1, bg: C.bg2 });
+      } else if (st.start) {
+        const a = st.start;
+        ctx.beginPath();
+        ctx.moveTo(this.sx(a[0]), this.sy(a[1]));
+        ctx.lineTo(this.sx(p[0]), this.sy(p[1]));
+        ctx.stroke();
+        const len = Math.hypot(p[0] - a[0], p[1] - a[1]);
+        const deg = ((Math.atan2(-(p[1] - a[1]), p[0] - a[0]) * 180) / Math.PI + 360) % 360;
+        const txt = this.typed ? `${this.typed} cm ↵` : `${fmt(len / 1000, 2)} m · ${Math.round(deg)}°`;
+        this.label(txt, this.sx((a[0] + p[0]) / 2), this.sy((a[1] + p[1]) / 2) - 16, { mono: true, color: C.fg1, bg: C.bg2 });
+      }
+    }
+    if (this.tool.type === "calib" && this.hover && this.calibStart) {
+      const a = this.calibStart, p = this.hover;
+      ctx.strokeStyle = C.warning;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(this.sx(a[0]), this.sy(a[1]));
+      ctx.lineTo(this.sx(p[0]), this.sy(p[1]));
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
     if (this.tool.type === "furniture" && this.hover) {
       const it = this.catalog.furniture.find((f) => f.id === this.tool.value);

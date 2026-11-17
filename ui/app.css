@@ -321,3 +321,11 @@ html, body { margin: 0; height: 100%; }
 
 /* Android: sistem çubuklarının (durum çubuğu, gezinme) altında kalmamak için güvenli alan boşluğu */
 .uh { box-sizing: border-box; padding-top: var(--uh-safe-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--uh-safe-bottom, env(safe-area-inset-bottom, 0px)); }
+
+/* Serbest mimari: yeni proje seçimi ve özel açıklık formu */
+.uh-newgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pl-space-3); }
+.uh-newcard { display: flex; flex-direction: column; gap: var(--pl-space-1); padding: var(--pl-space-4); border: 1px solid var(--pl-line); border-radius: var(--pl-radius-lg); background: var(--pl-bg-2); color: var(--pl-fg-1); font: inherit; text-align: start; cursor: pointer; }
+.uh-newcard:hover { border-color: var(--pl-accent-line); }
+.uh-newcard:focus-visible { outline: 2px solid var(--pl-line-focus); outline-offset: 2px; }
+.uh-coform { display: grid; gap: var(--pl-space-2); }
+@media (max-width: 600px) { .uh-newgrid { grid-template-columns: 1fr; } }

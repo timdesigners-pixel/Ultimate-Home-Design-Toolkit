@@ -608,6 +608,17 @@
     </div>
   </dialog>
 
+  <dialog class="pl-modal" id="newDialog" data-i18n-attr="aria-label=serbest.yeni_proje">
+    <div class="pl-modal__head"><div><b data-i18n="serbest.yeni_proje"></b><p class="uh-small" data-i18n="serbest.yeni_proje_aciklama"></p></div></div>
+    <div class="pl-modal__body uh-newgrid">
+      <button class="uh-newcard" type="button" data-new="serbest"><b data-i18n="serbest.tur_serbest"></b><span class="uh-small" data-i18n="serbest.tur_serbest_aciklama"></span></button>
+      <button class="uh-newcard" type="button" data-new="modul"><b data-i18n="serbest.tur_modul"></b><span class="uh-small" data-i18n="serbest.tur_modul_aciklama"></span></button>
+      <button class="uh-newcard" type="button" data-new="tiny"><b>Tiny House</b><span class="uh-small" data-i18n="serbest.tur_paket_aciklama"></span></button>
+      <button class="uh-newcard" type="button" data-new="van"><b>Van Builder</b><span class="uh-small" data-i18n="serbest.tur_paket_aciklama"></span></button>
+    </div>
+    <div class="pl-modal__foot"><button class="pl-btn pl-btn--ghost" type="button" id="newCancel" data-i18n="note.vazgec"></button></div>
+  </dialog>
+
   <dialog class="pl-modal" id="noteDialog" data-i18n-attr="aria-label=note.revizyon_notu">
     <div class="pl-modal__head"><div><b data-i18n="note.revizyon_notu"></b><p class="uh-small" data-i18n="note.or_pencere_iptal_ada_buyusun"></p></div></div>
     <div class="pl-modal__body"><input class="pl-input" id="noteText" maxlength="200" data-i18n-attr="placeholder=note.notunuz"></div>
@@ -615,6 +626,7 @@
   </dialog>
 
   <input type="file" id="fileInput" hidden>
+  <input type="file" id="underlayInput" accept="image/png,image/jpeg,image/webp" hidden>
   <input type="file" id="modelInput" accept=".glb,.gltf,.bin,.jpg,.jpeg,.png" multiple hidden>
 </div>
 <script type="module" src="boot.js"></script>

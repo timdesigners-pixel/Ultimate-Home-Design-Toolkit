@@ -804,7 +804,9 @@ fn dispatch(cmd: &str, payload: &str) -> Result<Value, String> {
 pub fn check(s: &Scene) -> Vec<Value> {
     let mut out = vec![];
     let mut push = |level: &str, text: String| out.push(json!({"level": level, "text": text}));
-    if s.modules.is_empty() {
+    // serbest çizimli ya da mekânlı projelerde modül gerekmez
+    let free = s.levels.iter().any(|l| l.walls.iter().any(|w| !w.generated)) || !s.spaces.is_empty();
+    if s.modules.is_empty() && !free {
         push("hata", "@check_no_modules".into());
     }
     for (a, b) in modules::overlaps(s) {
