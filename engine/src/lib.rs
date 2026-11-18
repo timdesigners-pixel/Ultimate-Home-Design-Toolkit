@@ -22,6 +22,7 @@ pub mod reference;
 pub mod obj;
 pub mod packs;
 pub mod paints;
+pub mod walls;
 pub mod palette;
 pub mod photo;
 pub mod render;

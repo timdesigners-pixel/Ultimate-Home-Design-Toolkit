@@ -231,6 +231,27 @@ fn world(p: [f64; 2], y: f64) -> V3 {
     [p[0], y, p[1]]
 }
 
+/// Dışbükey çokgen tabanlı dik prizma (köşe dolgusu).
+fn prism(b: &mut Batch, poly: &[[f64; 2]], y0: f64, y1: f64) {
+    let c = geom::centroid(poly);
+    for i in 0..poly.len() {
+        let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+        let mid = [(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0];
+        quad(b, world(p, y0), [q[0] - p[0], 0.0, q[1] - p[1]], [0.0, y1 - y0, 0.0], [mid[0] - c[0], 0.0, mid[1] - c[1]]);
+    }
+    for t in geom::triangulate(poly) {
+        for (y, up) in [(y1, 1.0f32), (y0, -1.0)] {
+            let (a, bb, d) = (world(poly[t[0]], y), world(poly[t[1]], y), world(poly[t[2]], y));
+            let n = cross([bb[0] - a[0], bb[1] - a[1], bb[2] - a[2]], [d[0] - a[0], d[1] - a[1], d[2] - a[2]]);
+            let order = if (n[1] >= 0.0) == (up > 0.0) { [a, bb, d] } else { [a, d, bb] };
+            for v in order {
+                b.positions.push(f(v));
+                b.normals.push([0.0, up, 0.0]);
+            }
+        }
+    }
+}
+
 /// Dikdörtgenden dikdörtgen delik çıkararak en çok 4 dikdörtgen döner.
 fn rect_minus(r: ([f64; 2], [f64; 2]), h: ([f64; 2], [f64; 2])) -> Vec<([f64; 2], [f64; 2])> {
     let (mn, mx) = r;
@@ -354,8 +375,14 @@ pub fn build(scene: &Scene, opt: &MeshOptions) -> SceneMesh {
                 }
             }
         }
-        // duvarlar
-        for w in &level.walls {
+        // serbest duvarların eğik birleşimlerinde köşe dolgusu
+        let interior_mat = interior.clone();
+        for (poly, h) in crate::walls::corner_fills(level) {
+            prism(m.batch(&interior_mat), &poly, el, el + h);
+        }
+        // duvarlar (eğri duvarlar kısa düz parçalara bölünür)
+        let expanded = crate::walls::expand(level);
+        for w in &expanded.walls {
             let len = w.length();
             if len < 1.0 {
                 continue;
@@ -457,12 +484,29 @@ pub fn build(scene: &Scene, opt: &MeshOptions) -> SceneMesh {
                 push_box(m.batch(frame_mat), o0, mul(ud, fr), [0.0, hs, 0.0], across);
                 push_box(m.batch(frame_mat), add(o0, mul(ud, ws - fr)), mul(ud, fr), [0.0, hs, 0.0], across);
                 push_box(m.batch(frame_mat), add(o0, [0.0, hs - fr, 0.0]), mul(ud, ws), [0.0, fr, 0.0], across);
+                let glazed = o.kind == OpeningKind::Window || o.style == "surgu" || o.style == "cam";
                 match o.kind {
+                    _ if glazed && o.kind == OpeningKind::Door => {
+                        // sürgülü ya da camlı kapı: alt kasa + iki cam panel
+                        push_box(m.batch(frame_mat), o0, mul(ud, ws), [0.0, fr, 0.0], across);
+                        let panels = if o.style == "surgu" { 2 } else { 1 };
+                        let pw = (ws - 2.0 * fr) / panels as f64;
+                        for k in 0..panels {
+                            let shift = if k % 2 == 0 { 0.25 } else { 0.6 };
+                            let p0 = add(add(o0, mul(ud, fr + pw * k as f64)), add([0.0, fr, 0.0], mul(across, shift)));
+                            push_box(m.batch(frame_mat), p0, mul(ud, pw), [0.0, hs - 2.0 * fr, 0.0], mul(across, 0.15));
+                            push_box(m.batch("cam"), add(p0, add(mul(ud, fr * 0.6), [0.0, fr * 0.6, -0.0])), mul(ud, pw - fr * 1.2), [0.0, hs - 2.0 * fr - fr * 1.2, 0.0], mul(across, 0.16));
+                        }
+                    }
                     OpeningKind::Window => {
                         push_box(m.batch(frame_mat), o0, mul(ud, ws), [0.0, fr, 0.0], across);
                         let g0 = add(add(o0, mul(ud, fr)), add([0.0, fr, 0.0], mul(across, 0.45)));
                         push_box(m.batch("cam"), g0, mul(ud, ws - 2.0 * fr), [0.0, hs - 2.0 * fr, 0.0], mul(across, 0.1));
-                        if ws > 1600.0 {
+                        if o.style == "vasistas" {
+                            // üstten açılır: yatay kayıt
+                            push_box(m.batch(frame_mat), add(o0, [0.0, hs * 0.62, 0.0]), mul(ud, ws), [0.0, fr * 0.8, 0.0], across);
+                        }
+                        if ws > 1600.0 && o.style != "sabit" {
                             let n = (ws / 1200.0).floor() as i32;
                             for k in 1..=n {
                                 let x = ws * k as f64 / (n + 1) as f64;
@@ -474,6 +518,16 @@ pub fn build(scene: &Scene, opt: &MeshOptions) -> SceneMesh {
                         if w.exterior {
                             let l0 = add(add(o0, mul(ud, fr)), mul(across, 0.3));
                             push_box(m.batch("kapi-ahsap"), l0, mul(ud, ws - 2.0 * fr), [0.0, hs - fr, 0.0], mul(across, 0.4));
+                        } else if o.style == "cift" {
+                            // çift kanat: iki yarım kanat, ikisi de 90° açık
+                            let inward = !o.swing.ends_with("disa");
+                            let dir = if inward { -1.0 } else { 1.0 };
+                            let lw = (ws - 2.0 * fr) / 2.0;
+                            for (hx, sgn) in [(fr, 1.0), (ws - fr, -1.0)] {
+                                let leaf = [right[0] * dir * lw, 0.0, right[1] * dir * lw];
+                                let p = add(world(p0, base), add(mul(ud, hx), mul([right[0] * dir, 0.0, right[1] * dir], half)));
+                                push_box(m.batch("kapi-ahsap"), p, mul(ud, 40.0 * sgn), [0.0, hs - fr - 10.0, 0.0], leaf);
+                            }
                         } else {
                             // iç kapı kanadı 90° açık, menteşe tarafına göre
                             let hinge_right = o.swing.starts_with("sag");

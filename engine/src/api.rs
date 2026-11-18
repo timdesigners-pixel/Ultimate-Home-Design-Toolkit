@@ -215,6 +215,41 @@ fn dispatch(cmd: &str, payload: &str) -> Result<Value, String> {
             s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?.walls.push(w.clone());
             finish(s, json!({"wall": w}))
         }
+        "add_wall" => {
+            let mut s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let a: [f64; 2] = arg(&v, "a")?;
+            let b: [f64; 2] = arg(&v, "b")?;
+            let mut k = s.levels.iter().map(|l| l.walls.len()).sum::<usize>() + 1;
+            let id = loop {
+                let c = format!("B{k}");
+                if !s.levels.iter().any(|l| l.walls.iter().any(|w| w.id == c)) {
+                    break c;
+                }
+                k += 1;
+            };
+            let w = plan::free_wall(&s, a, b, id, opt(&v, "thickness"), opt(&v, "arc").unwrap_or(0.0), opt(&v, "height"))?;
+            s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?.walls.push(w.clone());
+            finish(s, json!({"wall": w}))
+        }
+        "snap" => {
+            let s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let p: [f64; 2] = arg(&v, "point")?;
+            let from: Option<[f64; 2]> = opt(&v, "from");
+            let d = crate::walls::Snap::default();
+            let snap = crate::walls::Snap { grid: opt(&v, "grid").unwrap_or(d.grid), angle: opt(&v, "angle").unwrap_or(d.angle), magnet: opt(&v, "magnet").unwrap_or(d.magnet) };
+            let l = s.levels.iter().find(|l| l.id == level).ok_or("@level_not_found")?;
+            let (q, kind) = crate::walls::snap(l, p, from, snap);
+            Ok(json!({"point": q, "kind": kind}))
+        }
+        "wall_outline" => {
+            // plan çizimi için eğri duvar orta çizgileri
+            let s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let l = s.levels.iter().find(|l| l.id == level).ok_or("@level_not_found")?;
+            Ok(json!(l.walls.iter().filter(|w| w.arc.abs() >= 1.0).map(|w| (w.id.clone(), crate::walls::centerline(w))).collect::<std::collections::BTreeMap<_, _>>()))
+        }
         "name_room" => {
             let mut s = scene_of(&v)?;
             let level: String = arg(&v, "level")?;
@@ -229,6 +264,27 @@ fn dispatch(cmd: &str, payload: &str) -> Result<Value, String> {
             let p: [f64; 2] = arg(&v, "point")?;
             let l = s.levels.iter().find(|l| l.id == level).ok_or("@level_not_found")?;
             Ok(serde_json::to_value(plan::detect_room(l, p)?).unwrap())
+        }
+        "place_custom_opening" => {
+            let mut s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let p: [f64; 2] = arg(&v, "point")?;
+            let kind: String = arg(&v, "kind")?;
+            let kind = if kind == "window" { crate::model::OpeningKind::Window } else { crate::model::OpeningKind::Door };
+            let style: String = opt(&v, "style").unwrap_or_default();
+            let mut k = s.levels.iter().map(|l| l.openings.len()).sum::<usize>() + 1;
+            let prefix = if kind == crate::model::OpeningKind::Door { "K" } else { "P" };
+            let id = loop {
+                let c = format!("{prefix}{k}");
+                if !s.levels.iter().any(|l| l.openings.iter().any(|o| o.id == c)) {
+                    break c;
+                }
+                k += 1;
+            };
+            let l = s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?;
+            let o = plan::place_custom_opening(l, kind, &style, arg(&v, "width")?, arg(&v, "height")?, opt(&v, "sill").unwrap_or(900.0), p, id)?;
+            l.openings.push(o.clone());
+            finish(s, json!({"opening": o}))
         }
         "place_opening" => {
             let mut s = scene_of(&v)?;
@@ -748,7 +804,9 @@ fn dispatch(cmd: &str, payload: &str) -> Result<Value, String> {
 pub fn check(s: &Scene) -> Vec<Value> {
     let mut out = vec![];
     let mut push = |level: &str, text: String| out.push(json!({"level": level, "text": text}));
-    if s.modules.is_empty() {
+    // serbest çizimli ya da mekânlı projelerde modül gerekmez
+    let free = s.levels.iter().any(|l| l.walls.iter().any(|w| !w.generated)) || !s.spaces.is_empty();
+    if s.modules.is_empty() && !free {
         push("hata", "@check_no_modules".into());
     }
     for (a, b) in modules::overlaps(s) {

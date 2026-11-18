@@ -997,7 +997,12 @@
     "pack_no_space": "Projede paket gövdesi yok.",
     "pack_hub_no_key": "Hub istemci anahtarı kayıtlı değil. Hub'da bu uygulamaya “catalog.read” izni verip anahtarı MyMind ekranından kaydedin.",
     "pack_hub_offline": "PluginLabs Hub'a ulaşılamadı. Hub'ı açıp “Lisansları yenile”ye basın.",
-    "pack_desktop_only": "Paket lisansları masaüstü uygulamasında PluginLabs Hub'dan okunur; tarayıcı önizlemesinde paketler kilitlidir."
+    "pack_desktop_only": "Paket lisansları masaüstü uygulamasında PluginLabs Hub'dan okunur; tarayıcı önizlemesinde paketler kilitlidir.",
+    "mobile_files": "Bu cihazda dosya, uygulamanın kendi dosya seçicisiyle açılır.",
+    "mobile_cycles": "Cycles render yalnız Windows masaüstü uygulamasında kullanılır; bu cihazda dahili render motoru çalışır.",
+    "mobile_save_failed": "Dosya kaydedilemedi. Cihazda yer olduğundan ve uygulamanın depolama izni bulunduğundan emin olun.",
+    "opening_on_curved_wall": "Eğri duvara kapı ya da pencere konamaz.",
+    "opening_size_invalid": "Açıklık ölçüsü geçersiz (genişlik 30–800 cm, yükseklik 30–600 cm)."
   },
   "catalog": {
     "kanepe-3": "Üçlü kanepe",
@@ -1659,5 +1664,44 @@
       "battery_wh": "Akü kapasitesi",
       "autonomy_days": "Güneşsiz özerklik"
     }
+  },
+  "serbest": {
+    "serbest_duvar": "Serbest duvar",
+    "egri_duvar": "Eğri duvar",
+    "ipucu": "Serbest duvar: tıklayarak çizin, her tıklama bir sonraki duvarı başlatır; başlangıca dönünce oda kapanır. Açı 15°'ye kilitlenir (Shift: serbest açı), uçlar mevcut duvarlara yapışır (Alt: yapışma kapalı). Uzunluğu cm olarak yazıp Enter'a basabilirsiniz; Esc çizimi bitirir. Eğri duvar: iki uç, sonra yayın tepesi.",
+    "ozel_acilik": "Her ölçüde kapı / pencere",
+    "plan_altligi": "Plan altlığı",
+    "bicim": "Biçim",
+    "bicim_standart": "Standart",
+    "bicim_cift": "Çift kanat",
+    "bicim_surgu": "Sürgülü cam",
+    "bicim_cam": "Camlı kapı",
+    "bicim_sabit": "Sabit cam",
+    "bicim_vasistas": "Vasistas",
+    "denizlik": "Denizlik (cm)",
+    "duvara_yerlestir": "Duvara yerleştir",
+    "ozel_acilik_ipucu": "Ölçüleri cm olarak girin, sonra planda duvara tıklayın. Eğri duvarlara açıklık konmaz.",
+    "altlik_yukle": "Plan resmi yükle",
+    "altlik_ipucu": "Taranmış ya da fotoğraflanmış bir planı altlık yapın; ölçeği iki noktayla ayarlayıp üzerinden duvar çizin.",
+    "olcek_ayarla": "Ölçeği ayarla (2 nokta)",
+    "saydamlik": "Saydamlık",
+    "altligi_goster": "Altlığı göster",
+    "degistir": "Değiştir",
+    "olcek": "Ölçek: 1 piksel = {p} mm",
+    "gercek_uzunluk_cm": "İki nokta arasındaki gerçek uzunluk (cm):",
+    "olcek_ayarlandi": "Altlık ölçeği ayarlandı",
+    "altlik_yuklendi": "Plan altlığı yüklendi",
+    "olcek_ipucu": "Ölçeği ayarlamak için resimde uzunluğunu bildiğiniz bir çizginin iki ucuna tıklayın.",
+    "egrilik_cm": "Eğrilik (cm)",
+    "duvar_yuksekligi_cm": "Duvar yüksekliği (cm)",
+    "egrilik_ipucu": "Eğrilik, kirişin ortasından yayın tepesine uzaklıktır; 0 düz duvar, eksi değer ters yöne büker. Yükseklik boşsa kat yüksekliği kullanılır. Seçili duvarın uçlarını sürükleyerek uzatıp döndürebilirsiniz.",
+    "yeni_proje": "Yeni proje",
+    "yeni_proje_aciklama": "Nasıl başlamak istersiniz?",
+    "tur_serbest": "Serbest çizim",
+    "tur_serbest_aciklama": "Boş plan: her açıda ve eğri duvar, her ölçüde oda.",
+    "tur_modul": "Modüler ev",
+    "tur_modul_aciklama": "4 m genişlikli hazır modüllerle başla.",
+    "tur_paket_aciklama": "Genişleme paketi gövdesiyle başla.",
+    "serbest_basladi": "Serbest çizim hazır"
   }
 }

@@ -292,7 +292,7 @@ pub fn add(scene: &mut Scene, mut s: Space, openings: &[FitOpening], cam: Option
             continue;
         };
         n += 1;
-        let op = Opening { id: format!("{id}-A{n}"), wall, kind: if door { OpeningKind::Door } else { OpeningKind::Window }, offset, width: o.width, height, sill: if door { 0.0 } else { o.sill }, price: 0.0, swing: "sol-ice".into() };
+        let op = Opening { id: format!("{id}-A{n}"), wall, kind: if door { OpeningKind::Door } else { OpeningKind::Window }, offset, width: o.width, height, sill: if door { 0.0 } else { o.sill }, price: 0.0, swing: "sol-ice".into(), style: String::new() };
         match crate::plan::validate_opening(&scene.levels[0], &op) {
             Ok(()) => scene.levels[0].openings.push(op),
             Err(e) => notes.push(e),

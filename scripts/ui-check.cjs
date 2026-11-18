@@ -5,6 +5,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const root = path.join(__dirname, "..", "ui");
+const APP_CSP = require(path.join(__dirname, "..", "src-tauri", "tauri.conf.json")).app.security.csp;
 const out = process.argv[2] || path.join(__dirname, "..", "docs", "screenshots");
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".woff2": "font/woff2", ".png": "image/png", ".json": "application/json" };
 // Sahte Poly Haven (çevrimdışı test): küçük glTF kanepe ve bir parke doku seti
@@ -66,7 +67,8 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, {
     "Content-Type": types[path.extname(p)] || "application/octet-stream",
     // Tauri yapılandırmasındaki CSP + yalnız önizleme için WebAssembly izni
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
+    // Masaüstü/Android uygulamasının gerçek CSP'si; tarayıcı önizlemesi için yalnız WebAssembly izni eklenir
+    "Content-Security-Policy": APP_CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'"),
   });
   fs.createReadStream(p).pipe(res);
 });
@@ -413,6 +415,69 @@ const server = http.createServer((req, res) => {
   await page.click('[data-view="kutuphane"]');
   await page.waitForSelector('#libGroups [data-lib-group="Van"]');
   ok(true, "Paket ürünleri lisansla ürün kütüphanesinde");
+
+  // Serbest mimari: yeni proje türü, serbest duvar zinciri (yazılan uzunluk), kapanan oda, özel kapı, plan altlığı
+  const saved = async () => {
+    const t = await page.evaluate(() => localStorage.getItem("uhd-autosave-v1"));
+    return t ? JSON.parse(t.slice(t.indexOf("\n") + 1)) : null;
+  };
+  const savedUntil = async (fn) => { const end = Date.now() + 30000; while (Date.now() < end) { const sc = await saved(); if (sc && fn(sc)) return sc; await page.waitForTimeout(250); } throw new Error("otomatik kayıt beklenen duruma gelmedi"); };
+  await page.goto(base + "?view=karsilama");
+  await page.waitForSelector("#btnNew");
+  await page.click("#btnNew");
+  await page.waitForSelector("#newDialog[open]");
+  await shot("35-yeni-proje-turu.png");
+  await page.click('#newDialog [data-new="serbest"]');
+  await page.waitForSelector("#view-plan.is-active");
+  ok((await page.textContent("#activeTool")).includes("Serbest duvar"), "Yeni proje: serbest çizim aracı açık");
+  const cb = await page.locator("#canvasP").boundingBox();
+  const cx = Math.round(cb.x + cb.width * 0.35), cy = Math.round(cb.y + cb.height * 0.6);
+  await page.mouse.click(cx, cy);
+  await page.mouse.move(cx + 200, cy);
+  await page.keyboard.type("400");
+  await page.keyboard.press("Enter");
+  await savedUntil((sc) => sc.levels[0].walls.length === 1);
+  await page.mouse.move(cx + 300, cy - 400);
+  await page.keyboard.type("300");
+  await page.keyboard.press("Enter");
+  await savedUntil((sc) => sc.levels[0].walls.length === 2);
+  await page.mouse.move(cx + 2, cy + 1);
+  await page.mouse.click(cx + 2, cy + 1);
+  const tri = await savedUntil((sc) => sc.levels[0].walls.length === 3);
+  const lens = tri.levels[0].walls.map((w) => Math.round(Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1])));
+  ok(lens[0] === 4000 && lens[1] === 3000, `Serbest duvar: yazılan uzunluklar 400 ve 300 cm (${lens.join(", ")})`);
+  const w3 = tri.levels[0].walls[2];
+  ok(Math.hypot(w3.b[0] - tri.levels[0].walls[0].a[0], w3.b[1] - tri.levels[0].walls[0].a[1]) < 1, "Serbest duvar: başlangıca dönünce oda kapandı");
+  // özel kapı: çift kanat, 140 × 220 cm, ilk duvarın üstüne
+  await page.click('[data-co-kind="door"]');
+  await page.selectOption('[data-co="style"]', "cift");
+  await page.fill('[data-co="width"]', "140");
+  await page.dispatchEvent('[data-co="width"]', "change");
+  await page.fill('[data-co="height"]', "220");
+  await page.dispatchEvent('[data-co="height"]', "change");
+  await page.click("[data-tool='{\"type\":\"customopen\"}']");
+  await page.mouse.click(cx + 100, cy);
+  const withDoor = await savedUntil((sc) => sc.levels[0].openings.length === 1);
+  const door = withDoor.levels[0].openings[0];
+  ok(door.style === "cift" && door.width === 1400 && door.height === 2200, `Özel kapı: çift kanat 140 × 220 cm (${door.style} ${door.width}×${door.height})`);
+  await page.keyboard.press("Escape");
+  await shot("36-serbest-cizim.png");
+  // plan altlığı ve ölçek ayarı
+  const ulFile = path.join(out, "plan-altlik.png");
+  fs.writeFileSync(ulFile, makePng(200, 150, (x, y) => (x % 50 < 2 || y % 50 < 2 ? [40, 60, 90, 255] : [235, 235, 230, 255])));
+  await page.setInputFiles("#underlayInput", ulFile);
+  globalThis.__ulmm = (await savedUntil((sc) => (sc.underlays || []).length === 1)).underlays[0].mm_per_px;
+  page.once("dialog", (d) => d.accept("500"));
+  await page.mouse.click(cx - 100, cy + 80);
+  await page.mouse.click(cx + 60, cy + 80);
+  const ul = await savedUntil((sc) => Math.abs(sc.underlays[0].mm_per_px - (globalThis.__ulmm || 0)) > 0.001);
+  ok(ul.underlays[0].mm_per_px > 0, `Plan altlığı: ölçek ayarlandı (1 px = ${ul.underlays[0].mm_per_px} mm)`);
+  fs.unlinkSync(ulFile);
+  await page.evaluate(() => document.querySelector("#toolPanel details:nth-of-type(3)")?.setAttribute("open", ""));
+  await shot("37-plan-altligi.png");
+  await page.click('[data-view="uc"]');
+  await page.waitForTimeout(2500);
+  await shot("38-serbest-3b.png");
 
   // İngilizce arayüz: tüm metinler dil dosyasından gelir, eksik anahtar uyarısı olmamalı
   const missing = [];

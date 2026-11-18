@@ -1,6 +1,6 @@
 {
   "name": "ultimate-home-design-toolkit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "PluginLabs Ultimate Home Design Toolkit — Rust/Tauri 2 masaüstü uygulaması",
   "scripts": {

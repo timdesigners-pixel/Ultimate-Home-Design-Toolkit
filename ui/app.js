@@ -2,7 +2,7 @@
  * Tüm hesaplar Rust motorunda (bridge.engine). Arayüz yalnız durum, çizim ve etkileşimi yönetir. */
 import { t as L, tr as LM, locale, getLang, setLang, has as hasKey } from "./i18n.js";
 import * as B from "./bridge.js";
-import { PlanCanvas, moduleRect, fmt } from "./plan.js";
+import { PlanCanvas, moduleRect, fmt, wallLength } from "./plan.js";
 import { View3D } from "./view3d.js";
 import * as N from "./names.js";
 
@@ -15,7 +15,7 @@ const STEPS = ["model", "katlar", "plan", "uc", "ozet"];
 const S = {
   scene: null, json: "", catalog: null, view: "model", storey: 1, counts: {}, level: "L0",
   undo: [], q: Promise.resolve(), lastRender: null, atm: "gunduz", v3: { mode: "dis", levels: "all", cut: false },
-  camSet: false, dirty3d: true, unit: "m", wallT: 100, paintMat: "parke-ceviz", packs: null, licenses: [], hubLic: null, paint: { sys: "ral-classic", group: "*", q: "", target: "duvar", ral: null }, libGroup: "*", libQ: "", matCat: "zemin", keepRatio: false, motor: "perde", motorParams: null, motorTimer: null, sky: null, proj: null, ref: null, photo: null, engine: "internal", cycles: null, ph: { models: null, textures: null, cat: "seating", q: "", tcat: "floor", tq: "", busy: new Set(), thumbs: {}, loading: {}, error: {} }, exposure: null, pendingCam: null, saved: null, savedScene: null, elevSide: "on", sel3: null, texSig: "", thumbs: {}, saveTimer: null, checkTimer: null,
+  camSet: false, dirty3d: true, unit: "m", wallT: 100, paintMat: "parke-ceviz", packs: null, licenses: [], hubLic: null, custom: { kind: "door", style: "", width: 90, height: 210, sill: 90 }, paint: { sys: "ral-classic", group: "*", q: "", target: "duvar", ral: null }, libGroup: "*", libQ: "", matCat: "zemin", keepRatio: false, motor: "perde", motorParams: null, motorTimer: null, sky: null, proj: null, ref: null, photo: null, engine: "internal", cycles: null, ph: { models: null, textures: null, cat: "seating", q: "", tcat: "floor", tq: "", busy: new Set(), thumbs: {}, loading: {}, error: {} }, exposure: null, pendingCam: null, saved: null, savedScene: null, elevSide: "on", sel3: null, texSig: "", thumbs: {}, saveTimer: null, checkTimer: null,
 };
 
 /* ---------- yardımcılar ---------- */
@@ -194,7 +194,9 @@ const PLAN_TOOLS = () => {
   const f = S.catalog.furniture;
   const cat = (ids) => ids.map((id) => f.find((x) => x.id === id)).filter(Boolean).map((x) => ({ type: "furniture", value: x.id, label: N.catName(x) }));
   return [
-    { title: L("app.1_yapi_araclari"), items: [{ type: "select", label: L("app.sec_tasi") }, { type: "wall", label: L("app.duvar_ciz") }, { type: "measure", label: L("app.olcu_araci") }, { type: "furniture", value: "kolon", label: L("app.kolon") }, { type: "furniture", value: "merdiven", label: L("app.merdiven") }], extra: `<div class="pl-segment" role="radiogroup" aria-label="${L("app.duvar_kalinligi")}">${[[100, "10 cm"], [125, "12,5 cm"], [200, "20 cm"]].map(([v, l]) => `<button type="button" data-wt="${v}" class="${S.wallT === v ? "is-active" : ""}">${l}</button>`).join("")}</div><button class="uh-tool uh-tool--wide uh-mt" type="button" data-act="undo-wall">${L("app.son_duvari_geri_al")}</button><button class="uh-tool uh-tool--wide" type="button" data-act="clear-walls">${L("app.ic_duvarlari_arsivle")}</button><p class="uh-small">${L("app.duvar_iki_noktaya_tiklayin_90_hizali_10")}</p>` },
+    { title: L("app.1_yapi_araclari"), items: [{ type: "select", label: L("app.sec_tasi") }, { type: "freewall", label: L("serbest.serbest_duvar") }, { type: "freewall", value: "arc", label: L("serbest.egri_duvar") }, { type: "wall", label: L("app.duvar_ciz") }, { type: "measure", label: L("app.olcu_araci") }, { type: "furniture", value: "kolon", label: L("app.kolon") }, { type: "furniture", value: "merdiven", label: L("app.merdiven") }], extra: `<div class="pl-segment" role="radiogroup" aria-label="${L("app.duvar_kalinligi")}">${[[100, "10 cm"], [125, "12,5 cm"], [200, "20 cm"]].map(([v, l]) => `<button type="button" data-wt="${v}" class="${S.wallT === v ? "is-active" : ""}">${l}</button>`).join("")}</div><button class="uh-tool uh-tool--wide uh-mt" type="button" data-act="undo-wall">${L("app.son_duvari_geri_al")}</button><button class="uh-tool uh-tool--wide" type="button" data-act="clear-walls">${L("app.ic_duvarlari_arsivle")}</button><p class="uh-small">${L("serbest.ipucu")}</p><p class="uh-small">${L("app.duvar_iki_noktaya_tiklayin_90_hizali_10")}</p>` },
+    { title: L("serbest.ozel_acilik"), extra: customOpeningForm() },
+    { title: L("serbest.plan_altligi"), extra: underlayPanel() },
     { title: L("app.2_oda_mahal"), items: S.catalog.roomKinds.map((k) => ({ type: "room", value: k.id, label: N.roomKindName(k) })), extra: `<p class="uh-small">${L("app.turu_secin_sonra_duvarlarla_cevrili")}</p>` },
     { title: L("app.3_kapi"), items: S.catalog.openings.filter((o) => o.kind === "door").map((o) => ({ type: "opening", value: o.id, label: N.openingName(o) })) },
     { title: L("app.4_standart_pencereler"), items: S.catalog.openings.filter((o) => o.kind === "window").map((o) => ({ type: "opening", value: o.id, label: N.openingName(o).replace(/^\D+/, "") })), extra: `<p class="uh-small">${L("app.tasiyici_perdeye_kapi_pencere_konamaz")}</p>` },
@@ -208,8 +210,32 @@ const PLAN_TOOLS = () => {
     { title: L("app.12_revizyon_notu"), items: [{ type: "note", label: L("app.plana_not_ekle") }] },
   ];
 };
+function customOpeningForm() {
+  const c = S.custom;
+  const styles = c.kind === "window" ? ["", "sabit", "vasistas", "surgu"] : ["", "cift", "surgu", "cam"];
+  const num = (f, v, lab) => `<label class="pl-field"><span class="pl-field__label">${lab}</span><input class="pl-input" type="number" min="0" step="1" data-co="${f}" value="${v}"></label>`;
+  return `<div class="uh-coform">
+    <div class="pl-segment" role="radiogroup">${["door", "window"].map((k) => `<button type="button" data-co-kind="${k}" class="${c.kind === k ? "is-active" : ""}">${L(k === "door" ? "app.kapi" : "app.pencere")}</button>`).join("")}</div>
+    <label class="pl-field"><span class="pl-field__label">${L("serbest.bicim")}</span><select class="pl-select" data-co="style">${styles.map((s) => `<option value="${s}" ${c.style === s ? "selected" : ""}>${L(`serbest.bicim_${s || "standart"}`)}</option>`).join("")}</select></label>
+    <div class="uh-row">${num("width", c.width, L("app.genislik"))}${num("height", c.height, L("app.yukseklik"))}${c.kind === "window" ? num("sill", c.sill, L("serbest.denizlik")) : ""}</div>
+    <button class="uh-tool uh-tool--wide ${P.tool.type === "customopen" ? "is-active" : ""}" type="button" data-tool='{"type":"customopen"}'>${L("serbest.duvara_yerlestir")}</button>
+    <p class="uh-small">${L("serbest.ozel_acilik_ipucu")}</p></div>`;
+}
+function underlayPanel() {
+  const u = (S.scene.underlays || []).find((x) => x.level === S.level);
+  if (!u) return `<button class="uh-tool uh-tool--wide" type="button" data-act="underlay-load">${L("serbest.altlik_yukle")}</button><p class="uh-small">${L("serbest.altlik_ipucu")}</p>`;
+  return `<div class="uh-coform">
+    <button class="uh-tool uh-tool--wide ${P.tool.type === "calib" ? "is-active" : ""}" type="button" data-tool='{"type":"calib"}'>${L("serbest.olcek_ayarla")}</button>
+    <label class="pl-field"><span class="pl-field__label">${L("serbest.saydamlik")}</span><input class="pl-input" type="range" min="10" max="100" step="5" data-ul="opacity" value="${Math.round((u.opacity || 0.5) * 100)}"></label>
+    <label class="uh-check"><input type="checkbox" data-ul="visible" ${u.visible ? "checked" : ""}> ${L("serbest.altligi_goster")}</label>
+    <div class="uh-row uh-wrap"><button class="uh-tool" type="button" data-act="underlay-load">${L("serbest.degistir")}</button><button class="uh-tool" type="button" data-act="underlay-archive">${L("uc.arsivle")}</button></div>
+    <p class="uh-small">${L("serbest.olcek", { p: fmt(u.mm_per_px, 2) })}</p></div>`;
+}
 function toolLabel(t) {
   if (t.type === "select") return L("app.sec_tasi");
+  if (t.type === "freewall") return t.value === "arc" ? L("serbest.egri_duvar") : L("serbest.serbest_duvar");
+  if (t.type === "customopen") return `${L(S.custom.kind === "door" ? "app.kapi" : "app.pencere")} ${fmt(S.custom.width, 0)}×${fmt(S.custom.height, 0)}`;
+  if (t.type === "calib") return L("serbest.olcek_ayarla");
   if (t.type === "wall") return `${L("app.cm_duvar_ciz", { p: fmt(S.wallT / 10, S.wallT % 10 ? 1 : 0) })}`;
   if (t.type === "measure") return L("app.olcu_araci");
   if (t.type === "paint") return `${L("app.kaplama", { p: N.matName(S.scene.materials.find((m) => m.id === t.value)) })}`;
@@ -302,9 +328,10 @@ function renderInspector() {
     box.innerHTML = `<div class="uh-stats"><dt>${L("common.tur")}</dt><dd>${o.kind === "door" ? L("app.kapi") : L("app.pencere")}</dd><dt>${L("app.olcu")}</dt><dd>${fmt(o.width / 10, 0)}×${fmt(o.height / 10, 0)} cm</dd><dt>${L("foto.duvar")}</dt><dd>${esc(o.wall)} · ${fmt((Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1])) / 1000)} m</dd></div>
       ${field(L("app.duvar_basindan_uzaklik_m"), `<input class="pl-input" type="number" step="0.05" min="0" data-f="offset" value="${(o.offset / 1000).toFixed(2)}">`)}
       ${o.kind === "door" ? field(L("app.kapi_acilimi"), `<select class="pl-select" data-f="swing">${[["sol-ice", L("app.sol_mentese_ice")], ["sag-ice", L("app.sag_mentese_ice")], ["sol-disa", L("app.sol_mentese_disa")], ["sag-disa", L("app.sag_mentese_disa")]].map(([v, l]) => `<option value="${v}" ${o.swing === v ? "selected" : ""}>${l}</option>`).join("")}</select>`) : field(L("app.parapet_alt_kot_cm"), `<input class="pl-input" type="number" step="5" min="0" data-f="sill" value="${Math.round(o.sill / 10)}" ${o.height >= 2350 ? "disabled" : ""}>`)}
+      ${field(L("serbest.bicim"), `<select class="pl-select" data-f="style">${(o.kind === "door" ? ["", "cift", "surgu", "cam"] : ["", "sabit", "vasistas", "surgu"]).map((v) => `<option value="${v}" ${(o.style || "") === v ? "selected" : ""}>${L(`serbest.bicim_${v || "standart"}`)}</option>`).join("")}</select>`)}
       <div class="uh-row"><button class="pl-btn pl-btn--primary pl-btn--sm" type="button" data-act="apply-opening">${L("app.olcuyu_uygula")}</button><button class="pl-btn pl-btn--danger pl-btn--sm" type="button" data-act="archive">${L("uc.arsivle")}</button></div>`;
   } else if (it.sel.type === "wall") {
-    const len = Math.hypot(o.b[0] - o.a[0], o.b[1] - o.a[1]);
+    const len = wallLength(o);
     const kind = o.structural ? L("app.tasiyici_perde_beton_degistirilemez") : o.generated ? (o.exterior ? L("app.modul_dis_duvari") : L("app.modul_birlesim_duvari")) : L("app.ic_bolme");
     box.innerHTML = `<div class="uh-stats"><dt>${L("common.tur")}</dt><dd>${kind}</dd><dt>${L("app.uzunluk")}</dt><dd>${fmt(len / 1000)} m</dd><dt>${L("app.kalinlik")}</dt><dd>${fmt(o.thickness / 10, 1)} cm</dd></div>
       ${o.exterior ? field(L("app.dis_yuz"), matSelect("outer", outerMats(), o.outer, L("app.cephe_boyasi_genel"))) : ""}
@@ -318,7 +345,8 @@ function renderInspector() {
         <div class="uh-row uh-wrap">${[["9010", "7016"], ["9001", "6021"], ["1013", "5014"]].map(([u, d]) => `<button class="pl-btn pl-btn--ghost pl-btn--sm" type="button" data-act="two-tone" data-up="${u}" data-down="${d}"><span class="pl-swatch" style="background:${ralCss(u)}" aria-hidden="true"></span><span class="pl-swatch" style="background:${ralCss(d)}" aria-hidden="true"></span> RAL ${u} / ${d}</button>`).join("")}</div>
         <p class="uh-small">${L("boya.kombine_ipucu")}</p>
       </details>
-      ${!o.generated ? field(L("app.kalinlik_cm"), `<input class="pl-input" type="number" step="0.5" min="5" max="40" data-f="thick" value="${o.thickness / 10}">`) : ""}
+      ${!o.generated ? field(L("app.kalinlik_cm"), `<input class="pl-input" type="number" step="0.5" min="5" max="60" data-f="thick" value="${o.thickness / 10}">`) : ""}
+      ${!o.generated ? `<div class="uh-row">${field(L("serbest.egrilik_cm"), `<input class="pl-input" type="number" step="5" data-f="arc" value="${Math.round((o.arc || 0) / 10)}">`)}${field(L("serbest.duvar_yuksekligi_cm"), `<input class="pl-input" type="number" step="5" min="30" max="800" data-f="wh" value="${o.height ? Math.round(o.height / 10) : ""}" placeholder="${Math.round(it.level.height / 10)}">`)}</div><p class="uh-small">${L("serbest.egrilik_ipucu")}</p>` : ""}
       ${!o.generated ? `<button class="pl-btn pl-btn--danger pl-btn--sm" type="button" data-act="archive">${L("uc.arsivle")}</button>` : `<p class="uh-small">${L("app.modul_duvarlari_modulle_birlikte_degisir")}</p>`}`;
   } else if (it.sel.type === "room") {
     const a = netArea({ rooms: [o] });
@@ -366,6 +394,14 @@ function onInspectorChange(e) {
   } else if (it.sel.type === "wall" && f === "wmat") {
     level.walls.find((x) => x.id === it.o.id).material = v;
     commit(s);
+  } else if (it.sel.type === "wall" && (f === "arc" || f === "wh")) {
+    const w = level.walls.find((x) => x.id === it.o.id);
+    if (f === "arc") {
+      const chord = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+      w.arc = Math.max(-chord / 2, Math.min(chord / 2, (Number(v) || 0) * 10));
+      if (Math.abs(w.arc) >= 1 && level.openings.some((x) => x.wall === w.id)) { toast(LM("@opening_on_curved_wall"), { kind: "warn" }); renderInspector(); return; }
+    } else w.height = v === "" ? null : Math.max(300, Math.min(8000, (Number(v) || 0) * 10));
+    run(async () => { const r = await B.engine("refresh", { scene: s }); commit(r.scene); renderInspector(); });
   } else if (it.sel.type === "wall" && f === "thick") {
     level.walls.find((x) => x.id === it.o.id).thickness = Math.max(50, Math.min(400, (Number(v) || 10) * 10));
     run(async () => { const r = await B.engine("refresh", { scene: s }); commit(r.scene); });
@@ -388,6 +424,9 @@ function onInspectorChange(e) {
     commit(s);
   } else if (it.sel.type === "note" && f === "note") {
     s.notes.find((x) => x.id === it.o.id).text = v.slice(0, 200);
+    commit(s);
+  } else if (it.sel.type === "opening" && f === "style") {
+    level.openings.find((x) => x.id === it.o.id).style = v;
     commit(s);
   } else if (it.sel.type === "opening" && f === "swing") {
     level.openings.find((x) => x.id === it.o.id).swing = v;
@@ -448,6 +487,26 @@ function onPlanAction(kind, d) {
   if (kind === "archive") { archiveSelected(); return; }
   if (kind === "rotate") { rotateObject(); return; }
   if (kind === "object_moved") { commit(S.scene); renderInspector(); return; }
+  if (kind === "freewall") return run(async () => { const r = await B.engine("add_wall", { scene: S.scene, level: S.level, a: d.a, b: d.b, arc: d.arc || 0, thickness: S.wallT }); commit(r.scene); });
+  if (kind === "customopen") return run(async () => { const c = S.custom; const r = await B.engine("place_custom_opening", { scene: S.scene, level: S.level, point: d.point, kind: c.kind, style: c.style, width: c.width * 10, height: c.height * 10, sill: c.sill * 10 }); commit(r.scene); });
+  if (kind === "calibrate") {
+    const real = Number(String(prompt(L("serbest.gercek_uzunluk_cm")) || "").replace(",", "."));
+    if (!(real > 0)) return;
+    const s = clone();
+    const u = (s.underlays || []).find((x) => x.level === S.level);
+    if (!u) return;
+    // ekranda ölçülen mm, gerçek uzunluğa oranla: ölçek ve konum resmin sol üst köşesine göre güncellenir
+    const measured = Math.hypot(d.b[0] - d.a[0], d.b[1] - d.a[1]);
+    const k = (real * 10) / measured;
+    u.x = d.a[0] - (d.a[0] - u.x) * k;
+    u.y = d.a[1] - (d.a[1] - u.y) * k;
+    u.mm_per_px = Math.round(u.mm_per_px * k * 1000) / 1000;
+    commit(s);
+    P.setTool({ type: "select" });
+    buildTools();
+    toast(L("serbest.olcek_ayarlandi"), { sub: L("serbest.olcek", { p: fmt(u.mm_per_px, 2) }) });
+    return;
+  }
   if (kind === "wall") return run(async () => { const r = await B.engine("add_partition", { scene: S.scene, level: S.level, a: d.a, b: d.b, thickness: S.wallT }); commit(r.scene); });
   if (kind === "wall_moved") return run(async () => { const r = await B.engine("refresh", { scene: S.scene }); commit(r.scene); if (r.roomWarnings.length) toast(LM(r.roomWarnings[0]), { kind: "warn", action: L("top.geri_al"), onAction: undo }); });
   if (kind === "dimension") { const s = clone(); s.dimensions = s.dimensions || []; s.dimensions.push({ id: nextId("Ö", s.dimensions), level: S.level, a: d.a, b: d.b }); commit(s); return; }
@@ -901,6 +960,29 @@ async function imageToRgb(file, maxEdge) {
   for (let i = 0; i < d.length; i += 4) bin += String.fromCharCode(d[i], d[i + 1], d[i + 2]);
   return { width: w, height: h, rgb: btoa(bin) };
 }
+/** Plan altlığı: resmi en çok 2400 piksele küçültüp JPEG olarak sahneye koyar; ilk ölçek 1 piksel = 10 mm. */
+async function loadUnderlay(file) {
+  if (!file || file.size > 40 * 1024 * 1024) { toast(L("app.gorsel_40_mb_tan_kucuk_olmali"), { kind: "warn" }); return; }
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+  const w = Math.max(2, Math.round(bmp.width * k)), h = Math.max(2, Math.round(bmp.height * k));
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  cv.getContext("2d").drawImage(bmp, 0, 0, w, h);
+  const data = cv.toDataURL("image/jpeg", 0.85).split(",")[1];
+  const s = clone();
+  s.underlays = (s.underlays || []).filter((x) => x.level !== S.level);
+  // ilk yerleşim: görünen alanın ortası, resim görünen genişliğin %70'i kadar
+  const vw = P.c.clientWidth || 800, vh = P.c.clientHeight || 600;
+  const mm = Math.max(1, Math.round(((vw * 0.7) / P.view.s / w) * 100) / 100);
+  const cxw = (vw / 2 - P.view.ox) / P.view.s, cyw = (vh / 2 - P.view.oy) / P.view.s;
+  s.underlays.push({ level: S.level, mime: "image/jpeg", data, width_px: w, height_px: h, x: Math.round(cxw - (w * mm) / 2), y: Math.round(cyw - (h * mm) / 2), mm_per_px: mm, opacity: 0.5, visible: true });
+  commit(s);
+  P.setTool({ type: "calib" });
+  buildTools();
+  renderPlan();
+  toast(L("serbest.altlik_yuklendi"), { sub: L("serbest.olcek_ipucu") });
+}
 async function uploadLook(file) {
   if (!file || file.size > 40 * 1024 * 1024) { toast(L("app.gorsel_40_mb_tan_kucuk_olmali"), { kind: "warn" }); return; }
   const img = await imageToRgb(file, 256);
@@ -1279,6 +1361,16 @@ function renderMaterials() {
       <div class="uh-matcard__row">${priced ? `<input class="pl-input uh-cell-input" type="number" min="0" step="10" value="${m.price_m2}" data-mat-price="${m.id}" aria-label="${L("app.m2_fiyati", { p: esc(N.matName(m)) })}"><span class="uh-small">₺/m²</span>` : ""}<span class="uh-grow"></span><button class="pl-btn pl-btn--secondary pl-btn--sm" type="button" data-mat-apply="${m.id}">${L("app.uygula")}</button></div>
     </div></div>`).join("") || `<p class="uh-small">${L("app.bu_turde_kaplama_yok")}</p>`;
 }
+/** Android WebView güvenli alan değerini bildirmezse durum çubuğu kadar boşluk bırakılır. */
+function mobileSafeArea() {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;top:0;left:0;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none";
+  document.body.appendChild(probe);
+  const top = probe.getBoundingClientRect().height;
+  probe.remove();
+  if (top < 1) document.documentElement.style.setProperty("--uh-safe-top", "28px");
+}
+
 /* ---------- Genişleme paketleri (Hub'dan lisanslı) ---------- */
 const packOwned = (id) => !!(S.packs || []).find((p) => p.id === id && p.owned);
 async function loadPacks() {
@@ -1647,7 +1739,8 @@ async function init() {
   V.hooks = hooks3d;
   try {
     const info = await B.engine("info");
-    $("#engineInfo").textContent = `${L("app.rust_motoru", { version: info.version, p: B.isDesktop ? L("app.yerel") : L("app.webassembly_onizleme") })}`;
+    $("#engineInfo").textContent = `${L("app.rust_motoru", { version: info.version, p: B.isNative ? L("app.yerel") : L("app.webassembly_onizleme") })}`;
+    if (B.isMobile) mobileSafeArea();
     S.catalog = await B.engine("catalog");
     S.paint.ral = (await B.engine("paint_systems"))[0].colors;
     // görünen adlar seçili dile çevrilir; motorun özgün adları eşleştirme için saklanır
@@ -1729,7 +1822,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   const tool = t.closest("[data-tool]");
-  if (tool) { const tt = JSON.parse(tool.dataset.tool); if (tt.type === "wall") tt.thickness = S.wallT; P.setTool(tt); renderPlan(); P.c.focus(); return; }
+  if (tool) { const tt = JSON.parse(tool.dataset.tool); if (tt.type === "wall" || tt.type === "freewall") tt.thickness = S.wallT; P.setTool(tt); renderPlan(); P.c.focus(); return; }
   const wt = t.closest("[data-wt]");
   if (wt) { S.wallT = Number(wt.dataset.wt); P.setTool({ type: "wall", thickness: S.wallT }); renderPlan(); return; }
   const lg = t.closest("[data-lib-group]");
@@ -1762,6 +1855,18 @@ document.addEventListener("click", (e) => {
       commit(s);
     }
     if (a === "apply-opening") run(applyOpening);
+    if (a === "underlay-load") { $("#underlayInput").click(); return; }
+    if (a === "underlay-archive") {
+      const s = clone();
+      const u = (s.underlays || []).find((x) => x.level === S.level);
+      if (!u) return;
+      s.archive.push({ type: "underlay", item: u });
+      s.underlays = s.underlays.filter((x) => x !== u);
+      commit(s);
+      buildTools();
+      toast(L("app.arsivlendi"), { action: L("top.geri_al"), onAction: undo });
+      return;
+    }
     if (a === "undo-wall") {
       const s = clone();
       const lv = s.levels.find((l) => l.id === S.level);
@@ -1801,7 +1906,7 @@ document.addEventListener("click", (e) => {
     real.classList.add("is-loading");
     run(async () => {
       try {
-        const r = await B.engine("object_render", { scene: S.scene, cat: id, width: 400, height: 300, samples: B.isDesktop ? 48 : 12 });
+        const r = await B.engine("object_render", { scene: S.scene, cat: id, width: 400, height: 300, samples: B.isNative ? 48 : 12 });
         S.thumbs[id] = r.png;
         const box = $(`[data-thumb="${id}"]`);
         if (box) box.innerHTML = `<img src="data:image/png;base64,${r.png}" alt="${L("app.gercekci_onizleme_2")}">`;
@@ -1828,6 +1933,20 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", (e) => {
   const t = e.target;
   if (t.closest("#inspector")) { onInspectorChange(e); return; }
+  if (t.dataset.co) {
+    S.custom[t.dataset.co] = t.dataset.co === "style" ? t.value : Math.max(0, Number(t.value) || 0);
+    if (P.tool.type === "customopen") renderPlan();
+    return;
+  }
+  if (t.dataset.ul) {
+    const s = clone();
+    const u = (s.underlays || []).find((x) => x.level === S.level);
+    if (!u) return;
+    if (t.dataset.ul === "opacity") u.opacity = Math.max(0.1, Math.min(1, Number(t.value) / 100));
+    if (t.dataset.ul === "visible") u.visible = t.checked;
+    commit(s);
+    return;
+  }
   if (t.dataset.upper) { run(async () => { const r = await B.engine("toggle_upper", { scene: S.scene, ground: t.dataset.upper }); commit(r.scene); }); return; }
   if (t.dataset.rate) {
     const s = clone();
@@ -1864,10 +1983,19 @@ $("#btnMotorReal").onclick = () => run(async () => {
   const b = $("#btnMotorReal");
   b.classList.add("is-loading");
   try {
-    const r = await B.engine("object_render", { scene: S.scene, motor: S.motor, params: S.motorParams[S.motor], width: 720, height: 520, samples: B.isDesktop ? 64 : 16 });
+    const r = await B.engine("object_render", { scene: S.scene, motor: S.motor, params: S.motorParams[S.motor], width: 720, height: 520, samples: B.isNative ? 64 : 16 });
     $("#motorReal").src = `data:image/png;base64,${r.png}`;
     $("#motorReal").hidden = false;
   } finally { b.classList.remove("is-loading"); }
+});
+$("#underlayInput").addEventListener("change", (e) => run(() => loadUnderlay(e.target.files[0])));
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-co-kind]");
+  if (!b) return;
+  S.custom.kind = b.dataset.coKind;
+  S.custom.style = "";
+  if (S.custom.kind === "window") { S.custom.width = 120; S.custom.height = 140; S.custom.sill = 90; } else { S.custom.width = 90; S.custom.height = 210; }
+  buildTools();
 });
 $("#lookInput").addEventListener("change", (e) => run(() => uploadLook(e.target.files[0])));
 $("#btnPalette").onclick = () => $("#paletteInput").click();
@@ -2055,7 +2183,24 @@ $("#btnPlaceModules").onclick = () => run(async () => {
 $("#btnRotate").onclick = () => rotateModule();
 $("#btnArchiveSel").onclick = () => archiveSelected();
 $("#btnUndo").onclick = () => undo();
-$("#btnNew").onclick = () => run(newProject);
+$("#btnNew").onclick = () => $("#newDialog").showModal();
+$("#newCancel").onclick = () => $("#newDialog").close();
+$("#newDialog").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-new]");
+  if (!b) return;
+  $("#newDialog").close();
+  const t = b.dataset.new;
+  if (t === "tiny" || t === "van") { go("paket"); return; }
+  run(async () => {
+    await newProject();
+    if (t === "serbest") {
+      go("plan");
+      P.setTool({ type: "freewall", thickness: S.wallT });
+      renderPlan();
+      toast(L("serbest.serbest_basladi"), { sub: L("serbest.ipucu") });
+    }
+  });
+});
 $("#btnSave").onclick = () => exportAs("uhds");
 $("#btnOpen").onclick = () => exportAs("open");
 $("#btnCmd").onclick = openCmd;

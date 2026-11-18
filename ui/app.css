@@ -290,3 +290,42 @@ html, body { margin: 0; height: 100%; }
 .uh-packcard > .uh-row { flex-wrap: nowrap; align-items: center; }
 .uh-packcard .pl-applogo, .uh-packcard .pl-badge, .uh-packpreset .pl-btn { flex: none; }
 .uh-packpreset .pl-btn { white-space: nowrap; }
+
+/* Tablet ve telefon (Android): menü üstte yatay, çalışma alanı alt alta */
+@media (pointer: coarse) {
+  .uh-canvas { touch-action: none; }
+  .uh-navbtn, .uh-tool, .pl-btn { min-height: 40px; }
+}
+@media (max-width: 1100px) {
+  .uh { height: 100dvh; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .uh-side { width: auto; max-width: 100vw; min-width: 0; box-sizing: border-box; height: auto; flex-direction: row; align-items: center; gap: var(--pl-space-2); overflow-x: auto; overflow-y: hidden; padding: var(--pl-space-2) var(--pl-space-3); border-bottom: 1px solid var(--pl-line); }
+  .uh-side .uh-product, .uh-side .uh-mini, .uh-side .uh-navlabel, .uh-side .uh-engine { display: none; }
+  .uh-brand { flex: none; padding: 0 var(--pl-space-2) 0 0; }
+  .uh-navs, .uh-side__foot { flex-direction: row; flex: none; gap: var(--pl-space-1); margin-top: 0; padding-top: 0; }
+  .uh-navbtn { width: auto; }
+  .uh-std { display: none; }
+  .uh-view--work.is-active { flex-direction: column; overflow-y: auto; }
+  .uh-work, .uh-work--3 { grid-template-columns: 1fr; grid-auto-rows: auto; flex: none; }
+  .uh-work > .uh-canvaswrap { order: -1; height: 62dvh; }
+  .uh-panel, .uh-tools { border: 0; border-top: 1px solid var(--pl-line); overflow: visible; }
+  .uh-page { padding: var(--pl-space-4) var(--pl-space-4) var(--pl-space-8); }
+}
+@media (max-width: 600px) {
+  .uh-work > .uh-canvaswrap { height: 55dvh; }
+  .uh-top { padding: var(--pl-space-2); gap: var(--pl-space-1); }
+  .uh-page { padding: var(--pl-space-3) var(--pl-space-3) var(--pl-space-8); }
+  .uh-card { padding: var(--pl-space-4); }
+  .uh-packgrid, .uh-libgrid, .uh-swgrid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .uh-packgrid { grid-template-columns: 1fr; }
+}
+
+/* Android: sistem çubuklarının (durum çubuğu, gezinme) altında kalmamak için güvenli alan boşluğu */
+.uh { box-sizing: border-box; padding-top: var(--uh-safe-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--uh-safe-bottom, env(safe-area-inset-bottom, 0px)); }
+
+/* Serbest mimari: yeni proje seçimi ve özel açıklık formu */
+.uh-newgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pl-space-3); }
+.uh-newcard { display: flex; flex-direction: column; gap: var(--pl-space-1); padding: var(--pl-space-4); border: 1px solid var(--pl-line); border-radius: var(--pl-radius-lg); background: var(--pl-bg-2); color: var(--pl-fg-1); font: inherit; text-align: start; cursor: pointer; }
+.uh-newcard:hover { border-color: var(--pl-accent-line); }
+.uh-newcard:focus-visible { outline: 2px solid var(--pl-line-focus); outline-offset: 2px; }
+.uh-coform { display: grid; gap: var(--pl-space-2); }
+@media (max-width: 600px) { .uh-newgrid { grid-template-columns: 1fr; } }
