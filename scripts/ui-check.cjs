@@ -345,8 +345,14 @@ const server = http.createServer((req, res) => {
   // tek duvarda kombine boya: üst + alt bölge + şerit
   await page.goto(base + "?demo=1&view=plan&sel=wall:M1-G2000");
   await page.waitForSelector("#inspector .uh-details summary");
-  await page.click("#inspector .uh-details summary");
-  await page.click('#inspector [data-act="two-tone"][data-up="9010"]');
+  // denetçi yükleme sonrası bir kez daha çizilebilir; bölüm açık ve düğme görünür olana dek bekle
+  const twoTone = '#inspector [data-act="two-tone"][data-up="9010"]';
+  await waitUntil(async () => {
+    if (await page.isVisible(twoTone)) return true;
+    await page.evaluate(() => document.querySelector("#inspector .uh-details")?.setAttribute("open", ""));
+    return false;
+  });
+  await page.click(twoTone);
   await waitUntil(async () => (await page.inputValue('#inspector [data-f="lower"]').catch(() => "")) === "ral7016-ic");
   ok((await page.inputValue('#inspector [data-f="wmat"]')) === "ral9010-ic", "Kombine boya: üst renk RAL 9010");
   await page.fill('#inspector [data-f="split"]', "110");
