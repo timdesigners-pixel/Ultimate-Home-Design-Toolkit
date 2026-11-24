@@ -113,6 +113,11 @@ pub fn items() -> Vec<CatalogItem> {
     ]);
     v.push(CatalogItem { id: "sarkit-lamba", name: "Sarkıt lamba", group: "Aydınlatma", size: [500.0, 500.0, 320.0], price: 3_500.0, rooms: &["salon", "mutfak", "yatak", "calisma", "antre"], mount: -1.0, pack: "" });
     v.extend(pack_items());
+    // araç kutusundaki temel şekiller (1 m ölçülü; ölçekle boyutlandırılır)
+    for (id, name) in [("sekil-kutu", "Kutu"), ("sekil-silindir", "Silindir"), ("sekil-kure", "Küre"), ("sekil-plaka", "Plaka")] {
+        let size = if id == "sekil-plaka" { [1000.0, 1000.0, 40.0] } else { [1000.0, 1000.0, 1000.0] };
+        v.push(CatalogItem { id, name, group: "Temel şekiller", size, price: 0.0, rooms: &["salon"], mount: 0.0, pack: "" });
+    }
     v
 }
 
@@ -159,6 +164,9 @@ fn bx(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, m: &'static str) -> 
 /// Kutu parçalarına gerçekçi biçim atar: kumaş ve şilte yuvarlatılır, ayak ve direkler
 /// silindir, yaprak ve ampuller elipsoit olur.
 fn refine(id: &str, parts: &mut [Part]) {
+    if id.starts_with("sekil-") {
+        return;
+    }
     for p in parts.iter_mut() {
         let d = [p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]];
         let least = d[0].min(d[1]).min(d[2]);
@@ -201,6 +209,9 @@ fn raw_parts(id: &str) -> Vec<Part> {
     let [w, d, h] = item.size;
     let (hw, hd) = (w / 2.0, d / 2.0);
     match id {
+        "sekil-kutu" | "sekil-plaka" => vec![bx(-hw, 0.0, -hd, hw, h, hd, "lake-beyaz")],
+        "sekil-silindir" => vec![Part { min: [-hw, 0.0, -hd], max: [hw, h, hd], material: "lake-beyaz", shape: Shape::Cyl }],
+        "sekil-kure" => vec![Part { min: [-hw, 0.0, -hd], max: [hw, h, hd], material: "lake-beyaz", shape: Shape::Ball }],
         "th-loft-yatak" => vec![
             bx(-hw, 0.0, -hd, hw, 60.0, hd, "ahsap-mese"),
             bx(-hw + 100.0, 60.0, -hd + 100.0, hw - 100.0, 260.0, hd - 100.0, "kumas-beyaz"),

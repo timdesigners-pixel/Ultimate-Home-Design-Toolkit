@@ -2,7 +2,7 @@
  * Tüm hesaplar Rust motorunda (bridge.engine). Arayüz yalnız durum, çizim ve etkileşimi yönetir. */
 import { t as L, tr as LM, locale, getLang, setLang, has as hasKey } from "./i18n.js";
 import * as B from "./bridge.js";
-import { PlanCanvas, moduleRect, fmt, wallLength } from "./plan.js";
+import { PlanCanvas, moduleRect, fmt, wallLength, centerline } from "./plan.js";
 import { View3D } from "./view3d.js";
 import * as N from "./names.js";
 
@@ -880,33 +880,221 @@ function update3dSelection() {
   const y0 = lv.elevation + o.position[2];
   V.setBox([Math.min(...xs), y0, Math.min(...zs)], [Math.max(...xs), y0 + objHeight(o), Math.max(...zs)]);
 }
+/* ---------- 3B araç kutusu ---------- */
+// Araçlar: [kimlik, kısayol]. Etiketler dil dosyasında (araclar.<kimlik>).
+const TB_GROUPS = [
+  ["donustur", [["gezin", "G"], ["sec", "Q"], ["tasi", "W"], ["dondur", "E"], ["olcekle", "R"]]],
+  ["ciz", [["duvar", ""], ["kutu", ""], ["silindir", ""], ["kure", ""], ["plaka", ""]]],
+  ["kes", [["bosluk", ""], ["bol", ""]]],
+  ["sekil", [["yukselt", ""], ["eg", ""]]],
+  ["ekle", [["kutuphane", ""], ["gom", ""], ["zemine", ""], ["tavana", ""]]],
+  ["duzen", [["cogalt", "Ctrl+D"], ["dizi", ""], ["hizala", ""], ["arsivle", "Del"]]],
+  ["gorunum", [["dortlu", "Alt+W"], ["cercevele", "F"], ["tel", ""], ["planag", ""]]],
+];
+// tek tıkla iş yapan (kalıcı araç olmayan) komutlar
+const TB_ACTIONS = new Set(["kutuphane", "gom", "zemine", "tavana", "cogalt", "dizi", "hizala", "arsivle", "dortlu", "cercevele", "tel", "planag"]);
+const TB_PRIM = { kutu: "sekil-kutu", silindir: "sekil-silindir", kure: "sekil-kure", plaka: "sekil-plaka" };
+S.tool3 = "gezin";
+S.tb = { first: null };
+function renderToolbox() {
+  const body = $("#toolboxBody");
+  if (!body) return;
+  body.innerHTML = TB_GROUPS.map(([g, tools]) => `<div class="uh-tb-group"><div class="uh-tb-title pl-label">${L(`araclar.grup_${g}`)}</div><div class="uh-tb-grid">${tools.map(([id, key]) => {
+    const on = id === S.tool3 || (id === "dortlu" && V.layout === "quad") || (id === "tel" && V.wire);
+    return `<button type="button" class="uh-tb-btn ${on ? "is-active" : ""}" data-tb="${id}" title="${esc(L(`araclar.ipucu_${id}`))}${key ? ` (${key})` : ""}" aria-pressed="${on}">${esc(L(`araclar.${id}`))}</button>`;
+  }).join("")}</div></div>`).join("");
+  $("#toolboxHint").textContent = L(`araclar.ipucu_${S.tool3}`);
+}
+function setTool3(id) {
+  S.tool3 = id;
+  S.tb = { first: null };
+  V.edit = id !== "gezin";
+  $$("#seg3dMode button").forEach((b) => b.classList.toggle("is-active", b.dataset.mode === (V.edit ? "duzenle" : "gez")));
+  $("#canvas3d").style.cursor = V.edit ? "crosshair" : "";
+  renderToolbox();
+}
+function selectedObj() { return S.sel3 && S.scene.objects.find((x) => x.id === S.sel3); }
+/** 3B noktasındaki duvar (mm): kat yüksekliği ve duvar kalınlığı içinde. */
+function wallAt(pt) {
+  const [x, y, z] = pt;
+  let best = null;
+  for (const lv of S.scene.levels) {
+    if (y < lv.elevation - 50 || y > lv.elevation + lv.height + 400) continue;
+    for (const w of lv.walls) {
+      const pts = w.arc ? centerline(w) : [w.a, w.b];
+      let d = Infinity;
+      for (let i = 0; i + 1 < pts.length; i++) d = Math.min(d, segDist([x, z], pts[i], pts[i + 1]));
+      if (d <= w.thickness / 2 + 40 && (!best || d < best.d)) best = { w, lv, d };
+    }
+  }
+  return best;
+}
+function segDist(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2));
+  return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t);
+}
+function levelAtY(y) {
+  const ls = [...S.scene.levels].sort((a, b) => a.elevation - b.elevation);
+  return ls.filter((l) => y >= l.elevation - 200).pop() || ls[0];
+}
+async function tbAction(id) {
+  const o = selectedObj();
+  if (id === "dortlu") { V.toggleLayout(); renderToolbox(); return; }
+  if (id === "tel") { V.setWire(!V.wire); renderToolbox(); return; }
+  if (id === "planag") { go("plan"); return; }
+  if (id === "kutuphane") { go("kutuphane"); return; }
+  if (id === "cercevele") {
+    if (o) { const lv = S.scene.levels.find((l) => l.id === o.level); const cs = P.objCorners(o); const xs = cs.map((c) => c[0]), zs = cs.map((c) => c[1]); const y0 = lv.elevation + o.position[2]; V.frame([Math.min(...xs), y0, Math.min(...zs)], [Math.max(...xs), y0 + objHeight(o), Math.max(...zs)]); } else V.frame();
+    return;
+  }
+  if (!o) { toast(L("araclar.once_nesne_secin"), { kind: "warn" }); return; }
+  if (id === "cogalt") { act3d("dup"); return; }
+  if (id === "arsivle") { act3d("archive"); return; }
+  const s = clone();
+  const t = s.objects.find((x) => x.id === o.id);
+  const lv = s.levels.find((l) => l.id === t.level);
+  if (id === "zemine") t.position[2] = 0;
+  if (id === "tavana") t.position[2] = Math.max(0, lv.height - objHeight(o));
+  if (id === "dizi") {
+    const n = Math.round(Number(prompt(L("araclar.dizi_adet"), "3")) || 0);
+    const gap = Number(String(prompt(L("araclar.dizi_aralik_cm"), "100") || "").replace(",", "."));
+    if (!(n >= 1 && n <= 50) || !(gap > 0)) return;
+    const a = (t.rotation * Math.PI) / 180;
+    for (let k = 1; k <= n; k++) {
+      const c = JSON.parse(JSON.stringify(t));
+      c.id = nextId("N", s.objects);
+      c.position = [Math.round(t.position[0] + Math.cos(a) * gap * 10 * k), Math.round(t.position[1] + Math.sin(a) * gap * 10 * k), t.position[2]];
+      s.objects.push(c);
+    }
+  }
+  if (id === "gom" || id === "hizala") {
+    // en yakın duvara paralel yap; "göm" arka yarısını duvara gömer, "hizala" duvar yüzüne dayar
+    let best = null;
+    for (const w of lv.walls) {
+      const d = segDist([t.position[0], t.position[1]], w.a, w.b);
+      if (!best || d < best.d) best = { w, d };
+    }
+    if (!best) { toast(L("araclar.duvar_yok"), { kind: "warn" }); return; }
+    const w = best.w, len = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1;
+    const dir = [(w.b[0] - w.a[0]) / len, (w.b[1] - w.a[1]) / len];
+    let n = [-dir[1], dir[0]];
+    const rel = [t.position[0] - w.a[0], t.position[1] - w.a[1]];
+    const along = Math.max(0, Math.min(len, rel[0] * dir[0] + rel[1] * dir[1]));
+    if (rel[0] * n[0] + rel[1] * n[1] < 0) n = [-n[0], -n[1]];
+    const depth = P.objSize(o)[1];
+    const off = w.thickness / 2 + (id === "gom" ? 0 : depth / 2);
+    t.position = [Math.round(w.a[0] + dir[0] * along + n[0] * off), Math.round(w.a[1] + dir[1] * along + n[1] * off), t.position[2]];
+    // nesnenin önü (yerel +z) duvardan dışarı baksın
+    t.rotation = Math.round(((Math.atan2(n[0], n[1]) * 180) / Math.PI + 360) % 360);
+  }
+  commit(s);
+  update3dSelection();
+}
 const hooks3d = {
   drag: null,
   down(e) {
+    const tool = S.tool3;
     const hit = V.pick(e);
+    if (TB_PRIM[tool] || tool === "duvar") {
+      const lv = hit ? levelAtY(hit.point[1]) : S.scene.levels.find((l) => l.id === S.level) || S.scene.levels[0];
+      const p = V.planePoint(e, lv.elevation) || (hit && hit.point);
+      if (!p) return true;
+      if (TB_PRIM[tool]) {
+        S.sel3 = placeItem(TB_PRIM[tool], p[0], p[2], lv.id);
+        update3dSelection();
+        return true;
+      }
+      const q = [Math.round(p[0] / 10) * 10, Math.round(p[2] / 10) * 10];
+      if (!S.tb.first) { S.tb.first = { p: q, level: lv.id }; toast(L("araclar.duvar_ikinci_nokta")); return true; }
+      const a = S.tb.first.p;
+      S.tb.first = { p: q, level: lv.id };
+      run(async () => { const r = await B.engine("add_wall", { scene: S.scene, level: lv.id, a, b: q, thickness: S.wallT }); commit(r.scene); });
+      return true;
+    }
+    if (tool === "bosluk" || tool === "bol" || tool === "eg") {
+      const hw = hit && wallAt(hit.point);
+      if (!hw) { toast(L("araclar.duvara_tiklayin"), { kind: "warn" }); return true; }
+      const pt = [hit.point[0], hit.point[2]];
+      if (tool === "bosluk") {
+        const c = S.custom;
+        run(async () => { const r = await B.engine("place_custom_opening", { scene: S.scene, level: hw.lv.id, point: pt, kind: c.kind, style: c.style, width: c.width * 10, height: c.height * 10, sill: c.sill * 10 }); commit(r.scene); });
+        return true;
+      }
+      if (tool === "bol") {
+        run(async () => { const r = await B.engine("split_wall", { scene: S.scene, level: hw.lv.id, wall: hw.w.id, point: pt }); commit(r.scene); toast(L("araclar.duvar_bolundu")); });
+        return true;
+      }
+      if (hw.w.generated) { toast(LM("@wall_split_not_allowed"), { kind: "warn" }); return true; }
+      if (hw.lv.openings.some((x) => x.wall === hw.w.id)) { toast(LM("@opening_on_curved_wall"), { kind: "warn" }); return true; }
+      this.drag = { kind: "eg", lv: hw.lv.id, id: hw.w.id, ref: hit.point, moved: false };
+      return true;
+    }
+    // seç / taşı / döndür / ölçekle / yükselt
     const o = hit && objectAt(hit.point);
     S.sel3 = o ? o.id : null;
     update3dSelection();
-    if (!o) return false;
-    const y = hit.point[1];
-    const start = V.planePoint(e, y);
-    this.drag = start ? { id: o.id, y, start, pos: [...o.position], moved: false } : null;
-    return !!this.drag;
+    if (!o) {
+      if (tool === "yukselt" && hit) {
+        const hw = wallAt(hit.point);
+        if (hw && !hw.w.generated) { this.drag = { kind: "wallh", lv: hw.lv.id, id: hw.w.id, y: e.clientY, h0: hw.w.height || hw.lv.height, moved: false }; return true; }
+      }
+      return false;
+    }
+    if (tool === "sec") return true;
+    const ref = hit.point;
+    const start = V.dragPoint(e, ref);
+    this.drag = { kind: tool, id: o.id, ref, start, x: e.clientX, y: e.clientY, pos: [...o.position], rot: o.rotation || 0, scale: [...o.scale], moved: false };
+    return true;
   },
   move(e) {
     const d = this.drag;
     if (!d) return;
-    const p = V.planePoint(e, d.y);
-    if (!p) return;
+    if (d.kind === "eg" || d.kind === "wallh") {
+      const lv = S.scene.levels.find((l) => l.id === d.lv);
+      const w = lv && lv.walls.find((x) => x.id === d.id);
+      if (!w) return;
+      if (d.kind === "wallh") {
+        w.height = Math.max(300, Math.min(8000, Math.round((d.h0 + (d.y - e.clientY) * 10) / 10) * 10));
+        $("#b3dSel").textContent = `${L("serbest.duvar_yuksekligi_cm")}: ${Math.round(w.height / 10)}`;
+      } else {
+        const p = V.dragPoint(e, d.ref);
+        if (!p) return;
+        const c = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1;
+        const left = [-(w.b[1] - w.a[1]) / c, (w.b[0] - w.a[0]) / c];
+        const arc = (p[0] - (w.a[0] + w.b[0]) / 2) * left[0] + (p[2] - (w.a[1] + w.b[1]) / 2) * left[1];
+        w.arc = Math.round(Math.max(-c / 2, Math.min(c / 2, arc)) / 10) * 10;
+        $("#b3dSel").textContent = `${L("serbest.egrilik_cm")}: ${Math.round(w.arc / 10)}`;
+      }
+      d.moved = true;
+      return;
+    }
     const o = S.scene.objects.find((x) => x.id === d.id);
-    o.position = [Math.round((d.pos[0] + p[0] - d.start[0]) / 50) * 50, Math.round((d.pos[1] + p[2] - d.start[2]) / 50) * 50, o.position[2]];
+    if (!o) return;
+    if (d.kind === "tasi") {
+      const p = V.dragPoint(e, d.ref);
+      if (!p || !d.start) return;
+      const kind = V.activeKind();
+      o.position = [Math.round((d.pos[0] + p[0] - d.start[0]) / 50) * 50, Math.round((d.pos[1] + p[2] - d.start[2]) / 50) * 50, kind === "front" || kind === "right" ? Math.max(0, Math.round((d.pos[2] + p[1] - d.start[1]) / 50) * 50) : o.position[2]];
+    } else if (d.kind === "dondur") {
+      const deg = d.rot + (e.clientX - d.x) * 0.6;
+      o.rotation = ((Math.round(deg / (e.shiftKey ? 1 : 15)) * (e.shiftKey ? 1 : 15)) % 360 + 360) % 360;
+    } else if (d.kind === "olcekle") {
+      const k = Math.max(0.2, Math.min(5, Math.exp((e.clientX - d.x - (e.clientY - d.y)) * 0.006)));
+      o.scale = d.scale.map((v) => Math.round(v * k * 100) / 100);
+    } else if (d.kind === "yukselt") {
+      const k = Math.max(0.1, Math.min(10, Math.exp((d.y - e.clientY) * 0.006)));
+      o.scale = [d.scale[0], Math.round(d.scale[1] * k * 100) / 100, d.scale[2]];
+    }
     d.moved = true;
     update3dSelection();
   },
   up() {
     const d = this.drag;
     this.drag = null;
-    if (d && d.moved) commit(S.scene);
+    if (!d || !d.moved) return;
+    if (d.kind === "eg" || d.kind === "wallh") { run(async () => { const r = await B.engine("refresh", { scene: S.scene }); commit(r.scene); }); return; }
+    commit(S.scene);
   },
 };
 function act3d(kind) {
@@ -1737,6 +1925,7 @@ async function init() {
   P = new PlanCanvas($("#canvasP"), { mode: "plan", onAction: onPlanAction });
   V = new View3D($("#canvas3d"), $("#view3dInfo"));
   V.hooks = hooks3d;
+  initToolbox();
   try {
     const info = await B.engine("info");
     $("#engineInfo").textContent = `${L("app.rust_motoru", { version: info.version, p: B.isNative ? L("app.yerel") : L("app.webassembly_onizleme") })}`;
@@ -1899,6 +2088,18 @@ document.addEventListener("click", (e) => {
   }
   const d3 = t.closest("[data-3d]");
   if (d3) { act3d(d3.dataset["3d"]); return; }
+  const tb = t.closest("[data-tb]");
+  if (tb) {
+    const id = tb.dataset.tb;
+    if (TB_ACTIONS.has(id)) run(() => tbAction(id)); else setTool3(id);
+    return;
+  }
+  if (t.closest("#toolboxMin")) {
+    const box = $("#toolbox");
+    box.classList.toggle("is-min");
+    try { localStorage.setItem("uhd-toolbox-min", box.classList.contains("is-min") ? "1" : ""); } catch { /* yok */ }
+    return;
+  }
   if (t.id === "btnLook") { $("#lookInput").click(); return; }
   const real = t.closest("[data-lib-real]");
   if (real) {
@@ -2006,7 +2207,7 @@ $("#btnWelcomeNew").onclick = () => run(newProject);
 $("#btnWelcomeDemo").onclick = () => run(loadDemo);
 $("#btnWelcomeOpen").onclick = () => exportAs("open");
 segment("#segElev", "side", (s) => { S.elevSide = s; renderWelcome(); });
-segment("#seg3dMode", "mode", (m) => { V.edit = m === "duzenle"; $("#canvas3d").style.cursor = V.edit ? "pointer" : ""; });
+segment("#seg3dMode", "mode", (m) => setTool3(m === "duzenle" ? "tasi" : "gezin"));
 /* sürükle bırak: ürün düğmeleri ve kartları → plan ya da 3B sahne; dosyalar → pencere */
 document.addEventListener("dragstart", (e) => {
   const el = e.target.closest && e.target.closest("[data-drag-item]");
@@ -2259,6 +2460,59 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCmd(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); undo(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); exportAs("uhds"); }
+  // 3B araç kısayolları (3ds Max / Blender alışkanlıkları): yalnız 3B ekranında ve yazı alanı dışında
+  if (S.view !== "uc" || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  if (e.altKey && e.key.toLowerCase() === "w") { e.preventDefault(); V.toggleLayout(); renderToolbox(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); run(() => tbAction("cogalt")); }
+    return;
+  }
+  const map = { q: "sec", w: "tasi", e: "dondur", r: "olcekle", g: "gezin" };
+  const k = e.key.toLowerCase();
+  if (map[k]) { e.preventDefault(); setTool3(map[k]); return; }
+  if (k === "f") { e.preventDefault(); run(() => tbAction("cercevele")); return; }
+  if (e.key === "Delete") { e.preventDefault(); run(() => tbAction("arsivle")); return; }
+  if (e.key === "Escape" && S.tb && S.tb.first) { S.tb.first = null; }
 });
+
+/** Araç kutusu: başlığından sürüklenir, konumu ve küçültme durumu tarayıcıda hatırlanır. */
+function initToolbox() {
+  const box = $("#toolbox"), head = $("#toolboxHead"), wrap = box.parentElement;
+  try {
+    const pos = JSON.parse(localStorage.getItem("uhd-toolbox-pos") || "null");
+    if (pos) { box.style.left = `${pos[0]}px`; box.style.top = `${pos[1]}px`; }
+    if (localStorage.getItem("uhd-toolbox-min")) box.classList.add("is-min");
+  } catch { /* yok */ }
+  let drag = null;
+  head.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
+    const r = box.getBoundingClientRect(), pr = wrap.getBoundingClientRect();
+    drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, pr };
+    head.setPointerCapture(e.pointerId);
+  });
+  head.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const r = box.getBoundingClientRect();
+    const x = Math.max(0, Math.min(drag.pr.width - r.width, e.clientX - drag.pr.left - drag.dx));
+    const y = Math.max(0, Math.min(drag.pr.height - 40, e.clientY - drag.pr.top - drag.dy));
+    box.style.left = `${Math.round(x)}px`;
+    box.style.top = `${Math.round(y)}px`;
+  });
+  head.addEventListener("pointerup", (e) => {
+    if (!drag) return;
+    drag = null;
+    try { head.releasePointerCapture(e.pointerId); } catch { /* yok */ }
+    try { localStorage.setItem("uhd-toolbox-pos", JSON.stringify([parseInt(box.style.left) || 0, parseInt(box.style.top) || 0])); } catch { /* yok */ }
+  });
+  // görünüm etiketleri (dörtlü görünümde her çeyreğin adı, etkin olan vurgulu)
+  V.onLayout = (rects, active, layout) => {
+    const el = $("#vpLabels");
+    if (!el) return;
+    el.innerHTML = rects.map((q) => `<span class="uh-vp ${q.i === active && layout === "quad" ? "is-active" : ""}" style="left:${q.x}px;top:${q.y}px;width:${q.w}px;height:${q.h}px"><b>${L(`araclar.gorunum_${["ust", "on", "sag", "perspektif"][q.i]}`)}</b></span>`).join("");
+  };
+  renderToolbox();
+}
+
+init();
 
 init();

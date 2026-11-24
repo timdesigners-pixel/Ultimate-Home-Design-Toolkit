@@ -34,6 +34,18 @@ export class View3D {
     this.group = new THREE.Group();
     this.scene.add(this.group);
     this.orbit = { target: new THREE.Vector3(5, 1, 4), dist: 22, yaw: -2.4, pitch: 0.55 };
+    // Görünümler: 0 Üst, 1 Ön, 2 Sağ (paralel), 3 Perspektif. Varsayılan tek görünüm (perspektif).
+    this.layout = "single";
+    this.active = 3;
+    this.views = ["top", "front", "right", "persp"].map((kind) => ({ kind, c: new THREE.Vector3(5, 1, 4), h: 8 }));
+    this.ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.05, 4000);
+    this.grid = new THREE.GridHelper(200, 200, 0x6d6a8a, 0x3a3d52);
+    this.grid.material.transparent = true;
+    this.grid.material.opacity = 0.35;
+    this.grid.visible = false;
+    this.scene.add(this.grid);
+    this.wire = false;
+    this.onLayout = null;
     this.drag = null;
     // Düzenleme kipi: sol tuş nesne seçer/taşır (hooks), boşlukta ve diğer tuşlarda kamera döner.
     this.edit = false;
@@ -43,6 +55,9 @@ export class View3D {
     this.box = null;
     canvas.addEventListener("pointerdown", (e) => {
       canvas.focus();
+      // dörtlü görünümde tıklanan görünüm etkin olur
+      const v = this.viewAt(e);
+      if (v && v.i !== this.active) { this.active = v.i; this.update(); }
       const handled = this.edit && e.button === 0 && !e.shiftKey && this.hooks && this.hooks.down(e);
       this.drag = handled ? { edit: true } : { x: e.clientX, y: e.clientY, b: e.button, shift: e.shiftKey };
       canvas.setPointerCapture(e.pointerId);
@@ -54,7 +69,15 @@ export class View3D {
       try { canvas.releasePointerCapture(e.pointerId); } catch { /* yok */ }
       if (d && d.edit) this.hooks.up(e);
     });
-    canvas.addEventListener("wheel", (e) => { e.preventDefault(); this.orbit.dist = Math.max(0.5, Math.min(200, this.orbit.dist * Math.exp(e.deltaY * 0.0012))); this.update(); }, { passive: false });
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const v = this.viewAt(e);
+      if (v && v.i !== this.active) this.active = v.i;
+      const k = Math.exp(e.deltaY * 0.0012);
+      if (this.views[this.active].kind === "persp") this.orbit.dist = Math.max(0.5, Math.min(200, this.orbit.dist * k));
+      else this.views[this.active].h = Math.max(0.3, Math.min(150, this.views[this.active].h * k));
+      this.update();
+    }, { passive: false });
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     canvas.addEventListener("keydown", (e) => {
       const k = { ArrowLeft: [-0.08, 0], ArrowRight: [0.08, 0], ArrowUp: [0, 0.05], ArrowDown: [0, -0.05] }[e.key];
@@ -66,14 +89,94 @@ export class View3D {
     this.setAtmosphere("gunduz");
   }
 
+  /** Görünüm dikdörtgenleri (kanvas içi CSS pikseli). Tek görünümde yalnız etkin görünüm. */
+  rects() {
+    const r = this.c.getBoundingClientRect();
+    const W = r.width, H = r.height;
+    if (this.layout !== "quad") return [{ i: this.active, x: 0, y: 0, w: W, h: H }];
+    const w = Math.floor(W / 2), h = Math.floor(H / 2);
+    return [{ i: 0, x: 0, y: 0, w, h }, { i: 1, x: w, y: 0, w: W - w, h }, { i: 2, x: 0, y: h, w, h: H - h }, { i: 3, x: w, y: h, w: W - w, h: H - h }];
+  }
+  viewAt(e) {
+    const r = this.c.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    return this.rects().find((q) => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h) || null;
+  }
+  setLayout(l) {
+    const was = this.layout;
+    this.layout = l === "quad" ? "quad" : "single";
+    if (this.layout === "quad" && was !== "quad") this.frameOrtho();
+    this.update();
+  }
+  /** Yapının sınır kutusu (metre): geniş ve ince zemin/arazi yüzeyleri sayılmaz. */
+  buildingBox() {
+    const box = new THREE.Box3(), part = new THREE.Box3(), sz = new THREE.Vector3();
+    for (const m of this.group.children) {
+      if (!m.geometry) continue;
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      part.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);
+      part.getSize(sz);
+      if (sz.y < 0.3 && Math.max(sz.x, sz.z) > 25) continue;
+      box.union(part);
+    }
+    return box.isEmpty() ? null : box;
+  }
+  /** Üst, Ön ve Sağ görünümleri yapıya ortalar; perspektif kamera değişmez. */
+  frameOrtho() {
+    const b = this.buildingBox();
+    if (!b) return;
+    const c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3());
+    const h = { top: Math.max(s.x, s.z), front: Math.max(s.x, s.y), right: Math.max(s.z, s.y) };
+    for (const v of this.views) if (v.kind !== "persp") { v.c.copy(c); v.h = Math.min(60, Math.max(0.6, h[v.kind] * 0.62)); }
+    this.gridAt = b;
+  }
+  toggleLayout() { this.setLayout(this.layout === "quad" ? "single" : "quad"); return this.layout; }
+  setWire(on) {
+    this.wire = !!on;
+    for (const m of this.group.children) m.material.wireframe = this.wire;
+    this.update();
+  }
+  /** Görünümün kamerası (paralel görünümlerde yön ve ölçek ayarlanmış). */
+  camFor(i, rect) {
+    const v = this.views[i];
+    if (v.kind === "persp") { this.cam.aspect = rect.w / Math.max(1, rect.h); this.cam.updateProjectionMatrix(); return this.cam; }
+    const o = this.ocam, a = rect.w / Math.max(1, rect.h);
+    o.left = -v.h * a; o.right = v.h * a; o.top = v.h; o.bottom = -v.h;
+    const c = v.c, D = 500;
+    if (v.kind === "top") { o.position.set(c.x, c.y + D, c.z); o.up.set(0, 0, -1); }
+    else if (v.kind === "front") { o.position.set(c.x, c.y, c.z + D); o.up.set(0, 1, 0); }
+    else { o.position.set(c.x + D, c.y, c.z); o.up.set(0, 1, 0); }
+    o.near = 0.05; o.far = D * 2 + 200;
+    o.lookAt(c);
+    o.updateProjectionMatrix();
+    o.updateMatrixWorld();
+    return o;
+  }
   ndc(e) {
     const r = this.c.getBoundingClientRect();
-    return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    const q = this.viewAt(e) || this.rects()[0];
+    return new THREE.Vector2(((e.clientX - r.left - q.x) / q.w) * 2 - 1, -((e.clientY - r.top - q.y) / q.h) * 2 + 1);
+  }
+  rayFrom(e) {
+    const q = this.viewAt(e) || this.rects()[0];
+    this.ray.setFromCamera(this.ndc(e), this.camFor(q.i, q));
+  }
+  /** Sahneyi (ya da verilen kutuyu, mm) tüm görünümlere sığdırır. */
+  frame(mn, mx) {
+    const bb = mn ? null : this.buildingBox();
+    const b = mn ? { mn: mn.map((x) => x * MM), mx: mx.map((x) => x * MM) } : bb ? { mn: bb.min.toArray(), mx: bb.max.toArray() } : this.bounds;
+    if (!b) return;
+    const c = new THREE.Vector3((b.mn[0] + b.mx[0]) / 2, (b.mn[1] + b.mx[1]) / 2, (b.mn[2] + b.mx[2]) / 2);
+    const size = Math.max(0.5, b.mx[0] - b.mn[0], b.mx[1] - b.mn[1], b.mx[2] - b.mn[2]);
+    this.orbit.target.copy(c);
+    this.orbit.dist = Math.max(1.5, size * 1.6);
+    for (const v of this.views) { v.c.copy(c); v.h = Math.max(0.6, size * 0.62); }
+    this.update();
   }
   /** İmlecin altındaki yüzey noktası (mm) ya da null. */
   pick(e) {
     if (!this.ok) return null;
-    this.ray.setFromCamera(this.ndc(e), this.cam);
+    this.rayFrom(e);
     const hits = this.ray.intersectObjects(this.group.children, false);
     if (!hits.length) return null;
     const p = hits[0].point;
@@ -82,13 +185,27 @@ export class View3D {
   /** İmleç ışınının y = yMm düzlemini kestiği nokta (mm) ya da null. */
   planePoint(e, yMm) {
     if (!this.ok) return null;
-    this.ray.setFromCamera(this.ndc(e), this.cam);
+    this.rayFrom(e);
     const o = this.ray.ray.origin, d = this.ray.ray.direction;
     if (Math.abs(d.y) < 1e-6) return null;
     const t = (yMm * MM - o.y) / d.y;
     if (t <= 0) return null;
     return [(o.x + d.x * t) / MM, yMm, (o.z + d.z * t) / MM];
   }
+  /** Sürükleme düzlemi: üst/perspektifte yatay düzlem, önde z = sabit, sağda x = sabit (mm). */
+  dragPoint(e, ref) {
+    if (!this.ok) return null;
+    const v = this.viewAt(e) || this.rects()[0];
+    const kind = this.views[v.i].kind;
+    if (kind === "top" || kind === "persp") return this.planePoint(e, ref[1]);
+    this.rayFrom(e);
+    const o = this.ray.ray.origin, d = this.ray.ray.direction;
+    const ax = kind === "front" ? "z" : "x";
+    if (Math.abs(d[ax]) < 1e-6) return null;
+    const t = (ref[ax === "x" ? 0 : 2] * MM - o[ax]) / d[ax];
+    return [(o.x + d.x * t) / MM, (o.y + d.y * t) / MM, (o.z + d.z * t) / MM];
+  }
+  activeKind() { return this.views[this.active].kind; }
   /** Seçim kutusu (mm) göster ya da kaldır. */
   setBox(mn, mx) {
     if (!this.ok) return;
@@ -140,6 +257,17 @@ export class View3D {
     if (!d) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     d.x = e.clientX; d.y = e.clientY;
+    const v = this.views[this.active];
+    if (v.kind !== "persp") {
+      // paralel görünümde sürükleme kaydırır
+      const q = this.rects().find((r) => r.i === this.active) || { h: 600 };
+      const k = (2 * v.h) / Math.max(1, q.h);
+      if (v.kind === "top") { v.c.x -= dx * k; v.c.z -= dy * k; }
+      else if (v.kind === "front") { v.c.x -= dx * k; v.c.y += dy * k; }
+      else { v.c.z += dx * k; v.c.y += dy * k; }
+      this.update();
+      return;
+    }
     if (d.b === 2 || d.b === 1 || d.shift) {
       const right = new THREE.Vector3().subVectors(this.cam.position, this.orbit.target).cross(this.cam.up).normalize();
       const k = this.orbit.dist * 0.0016;
@@ -157,8 +285,6 @@ export class View3D {
     const r = this.c.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return;
     this.r.setSize(r.width, r.height, false);
-    this.cam.aspect = r.width / r.height;
-    this.cam.updateProjectionMatrix();
     this.update();
   }
 
@@ -193,6 +319,7 @@ export class View3D {
       const mat = new THREE.MeshStandardMaterial({ map: useMap ? tx.map : null, side: THREE.DoubleSide, color: col, roughness: g.roughness, metalness: g.metallic * 0.85, transparent: g.opacity < 0.99, opacity: Math.max(0.15, g.opacity), alphaTest: g.alphaCutoff > 0 ? g.alphaCutoff : 0 });
       if (g.emission > 0) { mat.emissive = new THREE.Color().setRGB(g.color[0], g.color[1], g.color[2], THREE.LinearSRGBColorSpace); mat.emissiveIntensity = Math.min(3, g.emission / 3); }
       if (g.opacity < 0.99) mat.depthWrite = false;
+      mat.wireframe = this.wire;
       const mesh = new THREE.Mesh(geo, mat);
       mesh.castShadow = g.material !== "zemin-dis" && g.opacity >= 0.5;
       mesh.receiveShadow = true;
@@ -210,6 +337,11 @@ export class View3D {
       sc.updateProjectionMatrix();
       this.sun.target.position.set(cx, 0, cz);
       this.placeSun();
+      // paralel görünümler ilk sahnede yapıya ortalanır
+      if (!this.framedOrtho) {
+        this.framedOrtho = true;
+        this.frameOrtho();
+      }
     }
     this.info.textContent = `${L("app.ucgen", { p: data.triangles.toLocaleString(locale()) })}`;
     this.update();
@@ -272,6 +404,25 @@ export class View3D {
     const cp = Math.cos(o.pitch);
     this.cam.position.set(o.target.x + Math.sin(o.yaw) * cp * o.dist, o.target.y + Math.sin(o.pitch) * o.dist, o.target.z + Math.cos(o.yaw) * cp * o.dist);
     this.cam.lookAt(o.target);
-    this.r.render(this.scene, this.cam);
+    const rects = this.rects();
+    const r = this.c.getBoundingClientRect();
+    const H = r.height;
+    this.r.setScissorTest(true);
+    for (const q of rects) {
+      const kind = this.views[q.i].kind;
+      // ızgara yalnız paralel görünümlerde, yatay ızgara üst görünümde
+      this.grid.visible = kind !== "persp";
+      this.grid.rotation.set(kind === "front" ? Math.PI / 2 : 0, 0, kind === "right" ? Math.PI / 2 : 0);
+      // dik ızgaralar yapının arkasında durur, önünü örtmez
+      const gb = this.gridAt;
+      this.grid.position.set(kind === "right" && gb ? gb.min.x - 0.05 : 0, 0, kind === "front" && gb ? gb.min.z - 0.05 : 0);
+      const cam = this.camFor(q.i, q);
+      this.r.setViewport(q.x, H - q.y - q.h, q.w, q.h);
+      this.r.setScissor(q.x, H - q.y - q.h, q.w, q.h);
+      this.r.render(this.scene, cam);
+    }
+    this.r.setScissorTest(false);
+    this.grid.visible = false;
+    if (this.onLayout) this.onLayout(rects, this.active, this.layout);
   }
 }

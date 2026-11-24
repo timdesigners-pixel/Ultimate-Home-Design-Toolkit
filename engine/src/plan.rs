@@ -150,6 +150,38 @@ pub fn place_custom_opening(level: &Level, kind: OpeningKind, style: &str, width
     Ok(o)
 }
 
+/// Serbest duvarı tıklanan noktadan ikiye böler. Açıklıklar bulundukları parçaya taşınır.
+/// Dönüş: yeni (ikinci) parçanın kimliği.
+pub fn split_wall(level: &mut Level, wall_id: &str, p: P2, new_id: String) -> Result<String, String> {
+    let i = level.walls.iter().position(|w| w.id == wall_id).ok_or("@wall_not_found")?;
+    let w = level.walls[i].clone();
+    if w.generated || w.arc.abs() >= 1.0 {
+        return Err("@wall_split_not_allowed".into());
+    }
+    let len = w.length();
+    let ab = geom::sub(w.b, w.a);
+    let t = (((p[0] - w.a[0]) * ab[0] + (p[1] - w.a[1]) * ab[1]) / len).round();
+    if t < 100.0 || t > len - 100.0 {
+        return Err("@wall_split_near_end".into());
+    }
+    for o in level.openings.iter().filter(|o| o.wall == wall_id) {
+        if o.offset < t && o.offset + o.width > t {
+            return Err("@wall_split_through_opening".into());
+        }
+    }
+    let m = [(w.a[0] + ab[0] / len * t).round(), (w.a[1] + ab[1] / len * t).round()];
+    level.walls[i].b = m;
+    let mut second = w.clone();
+    second.id = new_id.clone();
+    second.a = m;
+    level.walls.insert(i + 1, second);
+    for o in level.openings.iter_mut().filter(|o| o.wall == wall_id && o.offset >= t) {
+        o.wall = new_id.clone();
+        o.offset -= t;
+    }
+    Ok(new_id)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Detected {
     pub polygon: Vec<P2>,
@@ -481,6 +513,18 @@ mod tests {
         assert!(place_custom_opening(&l, OpeningKind::Window, "cift", 1000.0, 1000.0, 900.0, [2100.0, 2100.0], "P1".into()).is_err());
         assert!(place_custom_opening(&l, OpeningKind::Window, "sabit", 100.0, 1000.0, 900.0, [2100.0, 2100.0], "P1".into()).is_err());
         assert!(place_custom_opening(&l, OpeningKind::Window, "sabit", 5000.0, 1000.0, 900.0, [2100.0, 2100.0], "P1".into()).unwrap_err().starts_with("@opening_too_wide"));
+    }
+
+    #[test]
+    fn split_wall_keeps_openings_on_their_part() {
+        let mut l = Level::default();
+        l.walls.push(Wall { id: "B1".into(), a: [0.0, 0.0], b: [4000.0, 0.0], thickness: 100.0, ..Default::default() });
+        l.openings.push(Opening { id: "K1".into(), wall: "B1".into(), offset: 2500.0, width: 900.0, ..Default::default() });
+        assert_eq!(split_wall(&mut l, "B1", [1500.0, 30.0], "B2".into()).unwrap(), "B2");
+        assert_eq!((l.walls[0].b, l.walls[1].a, l.walls[1].b), ([1500.0, 0.0], [1500.0, 0.0], [4000.0, 0.0]));
+        assert_eq!((l.openings[0].wall.as_str(), l.openings[0].offset), ("B2", 1000.0));
+        assert_eq!(split_wall(&mut l, "B2", [1550.0, 0.0], "B3".into()).unwrap_err(), "@wall_split_near_end");
+        assert_eq!(split_wall(&mut l, "B2", [3000.0, 0.0], "B3".into()).unwrap_err(), "@wall_split_through_opening");
     }
 
     #[test]

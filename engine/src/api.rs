@@ -232,6 +232,23 @@ fn dispatch(cmd: &str, payload: &str) -> Result<Value, String> {
             s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?.walls.push(w.clone());
             finish(s, json!({"wall": w}))
         }
+        "split_wall" => {
+            let mut s = scene_of(&v)?;
+            let level: String = arg(&v, "level")?;
+            let wall: String = arg(&v, "wall")?;
+            let p: [f64; 2] = arg(&v, "point")?;
+            let mut k = s.levels.iter().map(|l| l.walls.len()).sum::<usize>() + 1;
+            let id = loop {
+                let c = format!("B{k}");
+                if !s.levels.iter().any(|l| l.walls.iter().any(|w| w.id == c)) {
+                    break c;
+                }
+                k += 1;
+            };
+            let l = s.levels.iter_mut().find(|l| l.id == level).ok_or("@level_not_found")?;
+            let id = plan::split_wall(l, &wall, p, id)?;
+            finish(s, json!({"wall": id}))
+        }
         "snap" => {
             let s = scene_of(&v)?;
             let level: String = arg(&v, "level")?;
