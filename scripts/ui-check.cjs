@@ -345,8 +345,14 @@ const server = http.createServer((req, res) => {
   // tek duvarda kombine boya: üst + alt bölge + şerit
   await page.goto(base + "?demo=1&view=plan&sel=wall:M1-G2000");
   await page.waitForSelector("#inspector .uh-details summary");
-  await page.click("#inspector .uh-details summary");
-  await page.click('#inspector [data-act="two-tone"][data-up="9010"]');
+  // denetçi yükleme sonrası bir kez daha çizilebilir; bölüm açık ve düğme görünür olana dek bekle
+  const twoTone = '#inspector [data-act="two-tone"][data-up="9010"]';
+  await waitUntil(async () => {
+    if (await page.isVisible(twoTone)) return true;
+    await page.evaluate(() => document.querySelector("#inspector .uh-details")?.setAttribute("open", ""));
+    return false;
+  });
+  await page.click(twoTone);
   await waitUntil(async () => (await page.inputValue('#inspector [data-f="lower"]').catch(() => "")) === "ral7016-ic");
   ok((await page.inputValue('#inspector [data-f="wmat"]')) === "ral9010-ic", "Kombine boya: üst renk RAL 9010");
   await page.fill('#inspector [data-f="split"]', "110");
@@ -478,6 +484,32 @@ const server = http.createServer((req, res) => {
   await page.click('[data-view="uc"]');
   await page.waitForTimeout(2500);
   await shot("38-serbest-3b.png");
+
+  // Taşınabilir araç kutusu ve dörtlü görünüm
+  ok(await page.isVisible("#toolbox"), "3B: araç kutusu görünür");
+  ok((await page.$$("#toolboxBody [data-tb]")).length >= 25, "3B: araç kutusunda en az 25 araç");
+  ok((await page.$$("#vpLabels .uh-vp")).length === 1, "3B: varsayılan tek görünüm");
+  const objBefore = (await saved()).objects.length;
+  await page.click('#toolboxBody [data-tb="kutu"]');
+  const box3 = await page.locator("#canvas3d").boundingBox();
+  await page.mouse.click(box3.x + box3.width * 0.5, box3.y + box3.height * 0.62);
+  await savedUntil((sc) => sc.objects.length === objBefore + 1 && sc.objects.some((o) => o.mesh === "cat:sekil-kutu"));
+  ok(true, "3B: araç kutusuyla kutu eklendi");
+  await page.click('#toolboxBody [data-tb="cogalt"]');
+  await savedUntil((sc) => sc.objects.length === objBefore + 2);
+  ok(true, "3B: seçili nesne çoğaltıldı");
+  await page.click('#toolboxBody [data-tb="bol"]');
+  ok((await page.textContent("#toolboxHint")).length > 10, "3B: araç ipucu gösterildi");
+  await shot("39-arac-kutusu.png");
+  await page.keyboard.press("Alt+w");
+  await waitUntil(async () => (await page.$$("#vpLabels .uh-vp")).length === 4);
+  ok(true, "3B: Alt+W ile dört görünüm (Üst, Ön, Sağ, Perspektif)");
+  await page.waitForTimeout(800);
+  await shot("40-dortlu-gorunum.png");
+  await page.click('#toolboxBody [data-tb="dortlu"]');
+  await waitUntil(async () => (await page.$$("#vpLabels .uh-vp")).length === 1);
+  ok(true, "3B: tek görünüme dönüldü");
+  await page.click('#toolboxBody [data-tb="gezin"]');
 
   // İngilizce arayüz: tüm metinler dil dosyasından gelir, eksik anahtar uyarısı olmamalı
   const missing = [];
